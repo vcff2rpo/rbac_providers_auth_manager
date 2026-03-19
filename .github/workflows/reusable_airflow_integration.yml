@@ -214,7 +214,7 @@ jobs:
               if section not in cfg:
                   cfg[section] = {}
 
-          cfg["core"]["auth_manager"] = "rbac_providers_auth_manager.auth_manager.ItimLdapAuthManager"
+          cfg["core"]["auth_manager"] = "rbac_providers_auth_manager.auth_manager.RbacAuthManager"
           cfg["core"]["itim_ldap_permissions_ini"] = os.environ["AIRFLOW_PERMISSIONS_INI"]
           cfg["core"]["plugins_folder"] = os.environ["AIRFLOW_PLUGINS_DIR"]
           cfg["core"]["dags_folder"] = os.environ["AIRFLOW_DAGS_DIR"]
@@ -261,8 +261,8 @@ jobs:
           print("plugin zip =", os.environ["AIRFLOW_PLUGIN_ZIP"])
           print("effective sys.path =", sys.path)
           print("python-ldap version =", getattr(ldap, "__version__", "unknown"))
-          from rbac_providers_auth_manager.auth_manager import ItimLdapAuthManager
-          print("loaded auth manager =", ItimLdapAuthManager.__name__)
+          from rbac_providers_auth_manager.auth_manager import RbacAuthManager
+          print("loaded auth manager =", RbacAuthManager.__name__)
           PY
 
       - name: Airflow DB bootstrap smoke with verbose logs
