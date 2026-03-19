@@ -278,13 +278,13 @@ jobs:
       - name: Discover hello world DAG and tasks using plain-text Airflow CLI
         run: |
           set -euo pipefail
-          python -m airflow dags list 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/airflow-dags-list.log"
-          python -m airflow tasks list hello_world_ci 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/airflow-tasks-list.log"
+          python -W "ignore:Could not import graphviz:UserWarning" -m airflow dags list 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/airflow-dags-list.log"
+          python -W "ignore:Could not import graphviz:UserWarning" -m airflow tasks list hello_world_ci 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/airflow-tasks-list.log"
           {
             echo "Graphviz-dependent DAG rendering is intentionally skipped in CI."
             echo "DAG discovery is validated through 'airflow dags list', 'airflow tasks list', and 'airflow dags test'."
           } | tee "$AIRFLOW_CI_ARTIFACTS/airflow-dag-rendering-skipped.log"
-
+      
           grep -F "hello_world_ci" "$AIRFLOW_CI_ARTIFACTS/airflow-dags-list.log"
           grep -Fx "start" "$AIRFLOW_CI_ARTIFACTS/airflow-tasks-list.log"
           grep -Fx "hello" "$AIRFLOW_CI_ARTIFACTS/airflow-tasks-list.log"
