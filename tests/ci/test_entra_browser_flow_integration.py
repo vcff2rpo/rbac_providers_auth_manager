@@ -219,7 +219,9 @@ class _FakeManager:
     ) -> _FakeUser:
         return _FakeUser(username=identity.username, roles=("Admin", "Viewer"))
 
-    def _issue_jwt(self, *, user: _FakeUser, expiration_time_in_seconds: int) -> str:
+    def _issue_jwt(
+        self, *, user: _FakeUser, expiration_time_in_seconds: int
+    ) -> str:
         self.issued_jwt = (user.username, expiration_time_in_seconds)
         return "jwt-token-123"
 
@@ -375,7 +377,8 @@ def test_entra_login_start_and_callback_success(
     assert manager._session_service.persisted_secure is True
     assert manager._entra_provider.login_calls
 
-    parsed = urlsplit(start_response.body.decode("utf-8").removeprefix("redirect:"))
+    response_body = bytes(start_response.body).decode("utf-8")
+    parsed = urlsplit(response_body.removeprefix("redirect:"))
     query = parse_qs(parsed.query)
     assert query["state"] == [manager._session_service.flow_state.state]
     assert query["nonce"] == [manager._session_service.flow_state.nonce]
