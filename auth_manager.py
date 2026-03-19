@@ -15,21 +15,21 @@ from rbac_providers_auth_manager.authorization.helpers import resource_name
 if TYPE_CHECKING:
     from rbac_providers_auth_manager.entrypoints.auth_manager import (
         ItimAnonymousUser,
-        ItimLdapAuthManager,
-        ItimLdapUser,
+        RbacAuthManager,
+        RbacAuthUser,
     )
 
 __all__ = (
     "ItimAnonymousUser",
-    "ItimLdapAuthManager",
-    "ItimLdapUser",
+    "RbacAuthManager",
+    "RbacAuthUser",
     "resource_name",
 )
 
 
 def __getattr__(name: str) -> Any:
     """Resolve auth-manager classes lazily to avoid plugin import cycles."""
-    if name in {"ItimAnonymousUser", "ItimLdapAuthManager", "ItimLdapUser"}:
+    if name in {"ItimAnonymousUser", "RbacAuthManager", "RbacAuthUser"}:
         module = import_module("rbac_providers_auth_manager.entrypoints.auth_manager")
         return getattr(module, name)
     raise AttributeError(name)

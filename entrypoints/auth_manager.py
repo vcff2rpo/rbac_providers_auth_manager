@@ -99,7 +99,7 @@ log = get_logger("auth_manager")
 
 
 @dataclass(frozen=True, slots=True)
-class ItimLdapUser(BaseUser):
+class RbacAuthUser(BaseUser):
     """User object stored in JWT claims and attached to request context."""
 
     user_id: str
@@ -137,7 +137,7 @@ class ItimAnonymousUser(BaseUser):
         return "anonymous"
 
 
-class ItimLdapAuthManager(BaseAuthManager[ItimLdapUser]):
+class RbacAuthManager(BaseAuthManager[RbacAuthUser]):
     """LDAP + Entra auth manager with file-driven FAB-style RBAC."""
 
     def __init__(self, context: Any | None = None) -> None:
@@ -213,9 +213,9 @@ class ItimLdapAuthManager(BaseAuthManager[ItimLdapUser]):
         )
         self._log_runtime_capability_report(cfg)
 
-    def _user_model(self) -> type[ItimLdapUser]:
+    def _user_model(self) -> type[RbacAuthUser]:
         """Return the concrete authenticated user model."""
-        return ItimLdapUser
+        return RbacAuthUser
 
     @staticmethod
     def _anonymous_user() -> ItimAnonymousUser:
@@ -451,23 +451,23 @@ class ItimLdapAuthManager(BaseAuthManager[ItimLdapUser]):
     # JWT integration and Airflow entrypoint helpers
     # ------------------------------------------------------------------
 
-    def serialize_user(self, user: ItimLdapUser) -> dict[str, Any]:
+    def serialize_user(self, user: RbacAuthUser) -> dict[str, Any]:
         """Serialize the current user into JWT claims."""
         return self._user_session_service.serialize_user(user)
 
-    def deserialize_user(self, token: dict[str, Any]) -> ItimLdapUser:
+    def deserialize_user(self, token: dict[str, Any]) -> RbacAuthUser:
         """Rebuild a request user object from decoded JWT claims."""
-        return cast(ItimLdapUser, self._user_session_service.deserialize_user(token))
+        return cast(RbacAuthUser, self._user_session_service.deserialize_user(token))
 
-    def get_user(self) -> ItimLdapUser:
+    def get_user(self) -> RbacAuthUser:
         """Return the authenticated request user or an anonymous placeholder."""
-        return cast(ItimLdapUser, self._user_session_service.get_user())
+        return cast(RbacAuthUser, self._user_session_service.get_user())
 
     def is_logged_in(self) -> bool:
         """Return whether the current request contains an authenticated user."""
         return self._user_session_service.is_logged_in()
 
-    def _issue_jwt(self, *, user: ItimLdapUser, expiration_time_in_seconds: int) -> str:
+    def _issue_jwt(self, *, user: RbacAuthUser, expiration_time_in_seconds: int) -> str:
         """Delegate JWT creation to Airflow's configured signing implementation."""
         return self._user_session_service.issue_jwt(
             user=user,
@@ -510,7 +510,7 @@ class ItimLdapAuthManager(BaseAuthManager[ItimLdapUser]):
         username: str,
         password: str,
         request: Request | None,
-    ) -> ItimLdapUser:
+    ) -> RbacAuthUser:
         """Authenticate via LDAP provider and return the resolved user object."""
         return self._identity_auth_service.authenticate_ldap(
             username=username,
@@ -523,7 +523,7 @@ class ItimLdapAuthManager(BaseAuthManager[ItimLdapUser]):
         *,
         identity: ExternalIdentity,
         request: Request | None,
-    ) -> ItimLdapUser:
+    ) -> RbacAuthUser:
         """Resolve an Entra external identity into an authenticated user."""
         return self._identity_auth_service.authenticate_entra_identity(
             identity=identity,
@@ -553,7 +553,7 @@ class ItimLdapAuthManager(BaseAuthManager[ItimLdapUser]):
         """No Flask FAB views are registered; this is a FastAPI auth manager."""
         return self._entrypoint_app_service.register_views()
 
-    def get_extra_menu_items(self, *, user: ItimLdapUser) -> list[ExtraMenuItem]:
+    def get_extra_menu_items(self, *, user: RbacAuthUser) -> list[ExtraMenuItem]:
         """Return extra UI menu items. None are added by this plugin."""
         return self._entrypoint_app_service.get_extra_menu_items()
 
@@ -567,10 +567,10 @@ class ItimLdapAuthManager(BaseAuthManager[ItimLdapUser]):
 
     def create_token(
         self, headers: dict[str, str], body: dict[str, Any]
-    ) -> ItimLdapUser:
+    ) -> RbacAuthUser:
         """Authenticate username/password for API token issuance."""
         return cast(
-            ItimLdapUser, self._entrypoint_app_service.create_token(headers, body)
+            RbacAuthUser, self._entrypoint_app_service.create_token(headers, body)
         )
 
     def get_fastapi_app(self) -> FastAPI:
@@ -589,7 +589,7 @@ class ItimLdapAuthManager(BaseAuthManager[ItimLdapUser]):
     def _allowed(
         self,
         *,
-        user: ItimLdapUser,
+        user: RbacAuthUser,
         action: str,
         resource: str,
         context: object | None = None,
@@ -602,7 +602,7 @@ class ItimLdapAuthManager(BaseAuthManager[ItimLdapUser]):
             context=context,
         )
 
-    def is_authorized_view(self, *, access_view: Any, user: ItimLdapUser) -> bool:
+    def is_authorized_view(self, *, access_view: Any, user: RbacAuthUser) -> bool:
         """Authorize read-only UI views using FAB-style semantics."""
         return self._authorization_service.is_authorized_view(
             access_view=access_view, user=user
@@ -613,7 +613,7 @@ class ItimLdapAuthManager(BaseAuthManager[ItimLdapUser]):
         *,
         method: ResourceMethod | str,
         resource_name: str,
-        user: ItimLdapUser,
+        user: RbacAuthUser,
     ) -> bool:
         """Authorize a custom Airflow view/resource pair."""
         return self._authorization_service.is_authorized_custom_view(
@@ -629,7 +629,7 @@ class ItimLdapAuthManager(BaseAuthManager[ItimLdapUser]):
     def filter_authorized_menu_items(
         self,
         menu_items: list[MenuItem],
-        user: ItimLdapUser,
+        user: RbacAuthUser,
     ) -> list[MenuItem]:
         """Filter UI menu items according to the current RBAC policy."""
         return self._authorization_service.filter_authorized_menu_items(
@@ -640,7 +640,7 @@ class ItimLdapAuthManager(BaseAuthManager[ItimLdapUser]):
     def get_authorized_connections(
         self,
         *,
-        user: ItimLdapUser,
+        user: RbacAuthUser,
         method: ResourceMethod = "GET",
         session: Any = NEW_SESSION,
     ) -> set[str]:
@@ -655,7 +655,7 @@ class ItimLdapAuthManager(BaseAuthManager[ItimLdapUser]):
     def get_authorized_dag_ids(
         self,
         *,
-        user: ItimLdapUser,
+        user: RbacAuthUser,
         method: ResourceMethod = "GET",
         session: Any = NEW_SESSION,
     ) -> set[str]:
@@ -670,7 +670,7 @@ class ItimLdapAuthManager(BaseAuthManager[ItimLdapUser]):
     def get_authorized_pools(
         self,
         *,
-        user: ItimLdapUser,
+        user: RbacAuthUser,
         method: ResourceMethod = "GET",
         session: Any = NEW_SESSION,
     ) -> set[str]:
@@ -685,7 +685,7 @@ class ItimLdapAuthManager(BaseAuthManager[ItimLdapUser]):
     def get_authorized_variables(
         self,
         *,
-        user: ItimLdapUser,
+        user: RbacAuthUser,
         method: ResourceMethod = "GET",
         session: Any = NEW_SESSION,
     ) -> set[str]:
@@ -700,7 +700,7 @@ class ItimLdapAuthManager(BaseAuthManager[ItimLdapUser]):
         self,
         *,
         method: ResourceMethod,
-        user: ItimLdapUser,
+        user: RbacAuthUser,
         access_entity: Any | None = None,
         details: DagDetails | None = None,
     ) -> bool:
@@ -716,7 +716,7 @@ class ItimLdapAuthManager(BaseAuthManager[ItimLdapUser]):
         self,
         *,
         method: ResourceMethod,
-        user: ItimLdapUser,
+        user: RbacAuthUser,
         details: ConnectionDetails | None = None,
     ) -> bool:
         """Authorize access to Connection endpoints."""
@@ -730,7 +730,7 @@ class ItimLdapAuthManager(BaseAuthManager[ItimLdapUser]):
         self,
         *,
         method: ResourceMethod,
-        user: ItimLdapUser,
+        user: RbacAuthUser,
         details: PoolDetails | None = None,
     ) -> bool:
         """Authorize access to Pool endpoints."""
@@ -742,7 +742,7 @@ class ItimLdapAuthManager(BaseAuthManager[ItimLdapUser]):
         self,
         *,
         method: ResourceMethod,
-        user: ItimLdapUser,
+        user: RbacAuthUser,
         details: VariableDetails | None = None,
     ) -> bool:
         """Authorize access to Variable endpoints."""
@@ -756,7 +756,7 @@ class ItimLdapAuthManager(BaseAuthManager[ItimLdapUser]):
         self,
         *,
         method: ResourceMethod,
-        user: ItimLdapUser,
+        user: RbacAuthUser,
         details: ConfigurationDetails | None = None,
     ) -> bool:
         """Authorize access to Configuration endpoints."""
@@ -770,7 +770,7 @@ class ItimLdapAuthManager(BaseAuthManager[ItimLdapUser]):
         self,
         *,
         method: ResourceMethod,
-        user: ItimLdapUser,
+        user: RbacAuthUser,
         details: BackfillDetails | None = None,
     ) -> bool:
         """Authorize Backfill endpoints through DAG Run semantics.
@@ -789,7 +789,7 @@ class ItimLdapAuthManager(BaseAuthManager[ItimLdapUser]):
         self,
         *,
         method: ResourceMethod,
-        user: ItimLdapUser,
+        user: RbacAuthUser,
         details: AssetDetails | None = None,
     ) -> bool:
         """Authorize access to Asset endpoints."""
@@ -801,7 +801,7 @@ class ItimLdapAuthManager(BaseAuthManager[ItimLdapUser]):
         self,
         *,
         method: ResourceMethod,
-        user: ItimLdapUser,
+        user: RbacAuthUser,
         details: AssetAliasDetails | None = None,
     ) -> bool:
         """Authorize access to Asset Alias endpoints."""
@@ -812,7 +812,7 @@ class ItimLdapAuthManager(BaseAuthManager[ItimLdapUser]):
         )
 
     def is_authorized_hitl_task(
-        self, *, user: ItimLdapUser, task_instance: Any
+        self, *, user: RbacAuthUser, task_instance: Any
     ) -> bool:
         """Authorize access to a HITL task using assigned-user semantics."""
         return self._authorization_service.is_authorized_hitl_task(
@@ -823,7 +823,7 @@ class ItimLdapAuthManager(BaseAuthManager[ItimLdapUser]):
         self,
         requests: Sequence[IsAuthorizedDagRequest],
         *,
-        user: ItimLdapUser,
+        user: RbacAuthUser,
     ) -> bool:
         """Batch DAG authorization."""
         return self._authorization_service.batch_is_authorized_dag(requests, user=user)
@@ -832,7 +832,7 @@ class ItimLdapAuthManager(BaseAuthManager[ItimLdapUser]):
         self,
         requests: Sequence[IsAuthorizedConnectionRequest],
         *,
-        user: ItimLdapUser,
+        user: RbacAuthUser,
     ) -> bool:
         """Batch authorization for Connection requests."""
         return self._authorization_service.batch_is_authorized_connection(
@@ -843,7 +843,7 @@ class ItimLdapAuthManager(BaseAuthManager[ItimLdapUser]):
         self,
         requests: Sequence[IsAuthorizedPoolRequest],
         *,
-        user: ItimLdapUser,
+        user: RbacAuthUser,
     ) -> bool:
         """Batch authorization for Pool requests."""
         return self._authorization_service.batch_is_authorized_pool(requests, user=user)
@@ -852,7 +852,7 @@ class ItimLdapAuthManager(BaseAuthManager[ItimLdapUser]):
         self,
         requests: Sequence[IsAuthorizedVariableRequest],
         *,
-        user: ItimLdapUser,
+        user: RbacAuthUser,
     ) -> bool:
         """Batch authorization for Variable requests."""
         return self._authorization_service.batch_is_authorized_variable(
@@ -860,4 +860,4 @@ class ItimLdapAuthManager(BaseAuthManager[ItimLdapUser]):
         )
 
 
-ITIMLDAPAuthManager = ItimLdapAuthManager
+RbacAuthManager = RbacAuthManager

@@ -5,17 +5,17 @@ import pytest
 
 def test_auth_manager_import_under_airflow() -> None:
     pytest.importorskip("airflow")
-    from rbac_providers_auth_manager.auth_manager import ItimLdapAuthManager
+    from rbac_providers_auth_manager.auth_manager import RbacAuthManager
 
-    print("airflow_auth_manager_name=", ItimLdapAuthManager.__name__)
-    assert ItimLdapAuthManager.__name__ == "ItimLdapAuthManager"
+    print("airflow_auth_manager_name=", RbacAuthManager.__name__)
+    assert RbacAuthManager.__name__ == "RbacAuthManager"
 
 
 def test_entrypoint_fastapi_app_builds_under_airflow() -> None:
     pytest.importorskip("airflow")
-    from rbac_providers_auth_manager.auth_manager import ItimLdapAuthManager
+    from rbac_providers_auth_manager.auth_manager import RbacAuthManager
 
-    manager = ItimLdapAuthManager(context=None)
+    manager = RbacAuthManager(context=None)
     app = manager.get_fastapi_app()
     route_paths = sorted(
         path

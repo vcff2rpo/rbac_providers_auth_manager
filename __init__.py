@@ -117,7 +117,7 @@ Canonical runtime layout::
 Airflow activation::
 
     [core]
-    auth_manager = rbac_providers_auth_manager.auth_manager.ItimLdapAuthManager
+    auth_manager = rbac_providers_auth_manager.auth_manager.RbacAuthManager
 
 The package root is preserved mainly as a stable compatibility surface while
 canonical implementations are organized into logic-based folders.
