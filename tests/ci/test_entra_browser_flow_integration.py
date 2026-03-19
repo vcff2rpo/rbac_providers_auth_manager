@@ -219,9 +219,7 @@ class _FakeManager:
     ) -> _FakeUser:
         return _FakeUser(username=identity.username, roles=("Admin", "Viewer"))
 
-    def _issue_jwt(
-        self, *, user: _FakeUser, expiration_time_in_seconds: int
-    ) -> str:
+    def _issue_jwt(self, *, user: _FakeUser, expiration_time_in_seconds: int) -> str:
         self.issued_jwt = (user.username, expiration_time_in_seconds)
         return "jwt-token-123"
 
