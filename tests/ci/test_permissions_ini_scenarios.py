@@ -2,10 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from rbac_providers_auth_manager.config_runtime.mapping_parsers import (
     parse_role_mapping_raw,
 )
 from rbac_providers_auth_manager.config_runtime.parser import load_config
+from rbac_providers_auth_manager.runtime.secret_references import SecurityConfigError
 
 BASE_CONFIG = """
 [general]
@@ -112,7 +115,10 @@ def test_permissions_ini_allows_self_signed_ldap_only_with_explicit_security_ove
 
 def test_permissions_ini_allows_entra_graph_overage_fallback_only_with_override(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setenv("ENTRA_CLIENT_SECRET", "dummy-entra-secret")
+
     config_path = _write_config(
         tmp_path,
         BASE_CONFIG.replace(
@@ -136,6 +142,30 @@ def test_permissions_ini_allows_entra_graph_overage_fallback_only_with_override(
     assert cfg.general.enable_entra_id is True
     assert cfg.security.allow_graph_group_fallback is True
     assert cfg.entra_id.graph_fetch_groups_on_overage is True
+
+
+def test_permissions_ini_rejects_missing_entra_secret_env_reference(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("ENTRA_CLIENT_SECRET", raising=False)
+
+    config_path = _write_config(
+        tmp_path,
+        BASE_CONFIG.replace("enable_entra_id = false", "enable_entra_id = true")
+        + "\n\n[entra_id]\n"
+        + "enabled = true\n"
+        + "tenant_id = tenant\n"
+        + "client_id = client-id\n"
+        + "client_secret = env:ENTRA_CLIENT_SECRET\n"
+        + "allowed_oidc_hosts = login.microsoftonline.com, graph.microsoft.com\n",
+    )
+
+    with pytest.raises(
+        SecurityConfigError,
+        match="Secret environment variable is not set or empty: ENTRA_CLIENT_SECRET",
+    ):
+        load_config(config_path)
 
 
 def test_permissions_ini_supports_jwt_cookie_alias_and_samesite_fallback(
