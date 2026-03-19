@@ -36,7 +36,7 @@ jobs:
 
     services:
       ldap:
-        image: bitnami/openldap:latest
+        image: symas/openldap:latest
         env:
           LDAP_PORT_NUMBER: 1389
           LDAP_ROOT: dc=example,dc=org
