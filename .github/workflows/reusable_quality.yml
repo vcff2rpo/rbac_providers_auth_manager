@@ -15,20 +15,6 @@ permissions:
 env:
   PACKAGE_NAME: ${{ inputs['package-name'] }}
   PYTHONPATH: ${{ github.workspace }}/..
-  UNIT_TEST_FILES: >-
-    tests/ci/test_authorization_policy.py
-    tests/ci/test_browser_token_flow_matrix.py
-    tests/ci/test_config_matrix.py
-    tests/ci/test_fab_role_static_mirror.py
-    tests/ci/test_config_runtime.py
-    tests/ci/test_entra_backend_simulation.py
-    tests/ci/test_entra_browser_flow_integration.py
-    tests/ci/test_identity_mapping_matrix.py
-    tests/ci/test_import_smoke.py
-    tests/ci/test_ldap_backend_simulation.py
-    tests/ci/test_permissions_ini_scenarios.py
-    tests/ci/test_runtime_security_and_logging.py
-    tests/ci/test_runtime_smoke.py
   QUALITY_ARTIFACT_DIR: .ci-artifacts/quality
   PYTEST_VERBOSE_ARGS: >-
     -vv -rA -s --showlocals --durations=20 --log-cli-level=INFO
@@ -38,263 +24,233 @@ jobs:
     name: compile (Python 3.13)
     runs-on: ubuntu-latest
     timeout-minutes: 20
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - uses: actions/setup-python@v6
         with:
-          python-version: "3.13"
+          python-version: '3.13'
           cache: pip
           cache-dependency-path: |
             requirements-dev.txt
             tests/ci/*.py
-
-      - name: Upgrade packaging tools
-        run: python -m pip install --upgrade pip setuptools wheel
-
-      - name: Install quality and test dependencies
-        run: python -m pip install -r requirements-dev.txt
-
-      - name: Compile all Python sources
-        run: python -m compileall -q .
+      - run: python -m pip install --upgrade pip setuptools wheel
+      - run: python -m pip install -r requirements-dev.txt
+      - run: python -m compileall -q .
 
   pytest_collect:
     name: pytest collect (Python 3.13)
     runs-on: ubuntu-latest
     timeout-minutes: 20
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - uses: actions/setup-python@v6
         with:
-          python-version: "3.13"
+          python-version: '3.13'
           cache: pip
           cache-dependency-path: |
             requirements-dev.txt
             tests/ci/*.py
-
-      - name: Upgrade packaging tools
-        run: python -m pip install --upgrade pip setuptools wheel
-
-      - name: Install quality and test dependencies
-        run: python -m pip install -r requirements-dev.txt
-
+      - run: python -m pip install --upgrade pip setuptools wheel
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Resolve quality test inventory from contract manifest
+        run: echo "QUALITY_TEST_FILES=$(python scripts/ci/list_contract_tests.py --suite quality)" >> "$GITHUB_ENV"
       - name: Collect unit and smoke tests with verbose inventory
         run: |
           set -o pipefail
           mkdir -p "$QUALITY_ARTIFACT_DIR"
-          python -m pytest --collect-only -q $PYTEST_VERBOSE_ARGS $UNIT_TEST_FILES 2>&1 | tee "$QUALITY_ARTIFACT_DIR/pytest-collect.log"
-
-      - name: Upload collect logs
-        if: always()
+          python -m pytest --collect-only -q $PYTEST_VERBOSE_ARGS $QUALITY_TEST_FILES 2>&1 | tee "$QUALITY_ARTIFACT_DIR/pytest-collect.log"
+          python scripts/ci/report_solution_coverage.py 2>&1 | tee "$QUALITY_ARTIFACT_DIR/solution-coverage.log"
+      - if: always()
         uses: actions/upload-artifact@v4
         with:
           name: quality-pytest-collect
-          path: ${{ env.QUALITY_ARTIFACT_DIR }}/pytest-collect.log
+          path: |
+            ${{ env.QUALITY_ARTIFACT_DIR }}/pytest-collect.log
+            ${{ env.QUALITY_ARTIFACT_DIR }}/solution-coverage.log
+            .ci-artifacts/coverage-report/solution-coverage.json
+            .ci-artifacts/coverage-report/solution-coverage.md
 
   ruff_lint:
     name: ruff lint (Python 3.13)
     runs-on: ubuntu-latest
     timeout-minutes: 20
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - uses: actions/setup-python@v6
         with:
-          python-version: "3.13"
+          python-version: '3.13'
           cache: pip
           cache-dependency-path: |
             requirements-dev.txt
             tests/ci/*.py
-
-      - name: Upgrade packaging tools
-        run: python -m pip install --upgrade pip setuptools wheel
-
-      - name: Install quality and test dependencies
-        run: python -m pip install -r requirements-dev.txt
-
-      - name: Ruff lint
-        run: python -m ruff check .
+      - run: python -m pip install --upgrade pip setuptools wheel
+      - run: python -m pip install -r requirements-dev.txt
+      - run: python -m ruff check .
 
   ruff_format:
     name: ruff format check (Python 3.13)
     runs-on: ubuntu-latest
     timeout-minutes: 20
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - uses: actions/setup-python@v6
         with:
-          python-version: "3.13"
+          python-version: '3.13'
           cache: pip
           cache-dependency-path: |
             requirements-dev.txt
             tests/ci/*.py
-
-      - name: Upgrade packaging tools
-        run: python -m pip install --upgrade pip setuptools wheel
-
-      - name: Install quality and test dependencies
-        run: python -m pip install -r requirements-dev.txt
-
-      - name: Ruff format check
-        run: python -m ruff format --check .
+      - run: python -m pip install --upgrade pip setuptools wheel
+      - run: python -m pip install -r requirements-dev.txt
+      - run: python -m ruff format --check .
 
   mypy_package:
     name: mypy package (Python 3.13)
     runs-on: ubuntu-latest
     timeout-minutes: 20
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - uses: actions/setup-python@v6
         with:
-          python-version: "3.13"
+          python-version: '3.13'
           cache: pip
           cache-dependency-path: |
             requirements-dev.txt
             tests/ci/*.py
-
-      - name: Upgrade packaging tools
-        run: python -m pip install --upgrade pip setuptools wheel
-
-      - name: Install quality and test dependencies
-        run: python -m pip install -r requirements-dev.txt
-
-      - name: Mypy package
-        run: python -m mypy -p "$PACKAGE_NAME"
+      - run: python -m pip install --upgrade pip setuptools wheel
+      - run: python -m pip install -r requirements-dev.txt
+      - run: python -m mypy -p "$PACKAGE_NAME"
 
   mypy_tests:
     name: mypy tests (Python 3.13)
     runs-on: ubuntu-latest
     timeout-minutes: 20
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - uses: actions/setup-python@v6
         with:
-          python-version: "3.13"
+          python-version: '3.13'
           cache: pip
           cache-dependency-path: |
             requirements-dev.txt
             tests/ci/*.py
+      - run: python -m pip install --upgrade pip setuptools wheel
+      - run: python -m pip install -r requirements-dev.txt
+      - run: python -m mypy tests/ci scripts/ci
 
-      - name: Upgrade packaging tools
-        run: python -m pip install --upgrade pip setuptools wheel
-
-      - name: Install quality and test dependencies
-        run: python -m pip install -r requirements-dev.txt
-
-      - name: Mypy tests
-        run: python -m mypy tests/ci
-
-  pytest:
-    name: pytest + coverage (Python 3.13)
+  pytest_family_coverage:
+    name: pytest family coverage (${{ matrix.family }}, Python 3.13)
     runs-on: ubuntu-latest
     timeout-minutes: 25
-
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - family: config-runtime
+          - family: rbac-mirror
+          - family: browser-flows
+          - family: provider-simulations
+          - family: bootstrap-imports
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - uses: actions/setup-python@v6
         with:
-          python-version: "3.13"
+          python-version: '3.13'
           cache: pip
           cache-dependency-path: |
             requirements-dev.txt
             tests/ci/*.py
-
-      - name: Upgrade packaging tools
-        run: python -m pip install --upgrade pip setuptools wheel
-
-      - name: Install quality and test dependencies
-        run: python -m pip install -r requirements-dev.txt
-
-      - name: Run explicit unit and smoke inventory with detailed logs
+      - run: python -m pip install --upgrade pip setuptools wheel
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Resolve family inventory and threshold
+        run: |
+          echo "QUALITY_TEST_FILES=$(python scripts/ci/list_contract_tests.py --family '${{ matrix.family }}')" >> "$GITHUB_ENV"
+          echo "FAMILY_THRESHOLD=$(python scripts/ci/list_contract_tests.py --family '${{ matrix.family }}' --threshold)" >> "$GITHUB_ENV"
+      - name: Run family coverage gate with detailed logs
         run: |
           set -o pipefail
           mkdir -p "$QUALITY_ARTIFACT_DIR"
-          python -m pytest $PYTEST_VERBOSE_ARGS \
-            --maxfail=1 \
-            --disable-warnings \
-            --junitxml="$QUALITY_ARTIFACT_DIR/pytest-quality.xml" \
-            --cov="$PACKAGE_NAME" \
-            --cov-report=term-missing \
-            --cov-report=xml:$QUALITY_ARTIFACT_DIR/coverage.xml \
-            $UNIT_TEST_FILES 2>&1 | tee "$QUALITY_ARTIFACT_DIR/pytest-quality.log"
-
-      - name: Upload quality logs and reports
+          python -m pytest $PYTEST_VERBOSE_ARGS             --maxfail=1             --disable-warnings             --junitxml="$QUALITY_ARTIFACT_DIR/pytest-${{ matrix.family }}.xml"             --cov="$PACKAGE_NAME"             --cov-report=term-missing             --cov-report=xml:$QUALITY_ARTIFACT_DIR/coverage-${{ matrix.family }}.xml             --cov-fail-under=$FAMILY_THRESHOLD             $QUALITY_TEST_FILES 2>&1 | tee "$QUALITY_ARTIFACT_DIR/pytest-${{ matrix.family }}.log"
+      - name: Upload family coverage artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: quality-pytest-report
+          name: quality-family-${{ matrix.family }}
           path: |
-            ${{ env.QUALITY_ARTIFACT_DIR }}/pytest-quality.log
-            ${{ env.QUALITY_ARTIFACT_DIR }}/pytest-quality.xml
-            ${{ env.QUALITY_ARTIFACT_DIR }}/coverage.xml
+            ${{ env.QUALITY_ARTIFACT_DIR }}/pytest-${{ matrix.family }}.log
+            ${{ env.QUALITY_ARTIFACT_DIR }}/pytest-${{ matrix.family }}.xml
+            ${{ env.QUALITY_ARTIFACT_DIR }}/coverage-${{ matrix.family }}.xml
 
   pip_audit:
     name: pip audit (Python 3.13)
     runs-on: ubuntu-latest
     timeout-minutes: 20
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - uses: actions/setup-python@v6
         with:
-          python-version: "3.13"
+          python-version: '3.13'
           cache: pip
           cache-dependency-path: |
             requirements-dev.txt
             tests/ci/*.py
+      - run: python -m pip install --upgrade pip setuptools wheel
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Run pip audit with log capture
+        run: |
+          set -o pipefail
+          mkdir -p "$QUALITY_ARTIFACT_DIR"
+          python -m pip_audit 2>&1 | tee "$QUALITY_ARTIFACT_DIR/pip-audit.log"
 
-      - name: Upgrade packaging tools
-        run: python -m pip install --upgrade pip setuptools wheel
-
-      - name: Install quality and test dependencies
-        run: python -m pip install -r requirements-dev.txt
-
-      - name: Pip audit
-        run: python -m pip_audit
+  summarize_quality:
+    name: quality artifact summary
+    runs-on: ubuntu-latest
+    if: ${{ always() }}
+    needs:
+      - pytest_collect
+      - pytest_family_coverage
+      - pip_audit
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: |
+            requirements-dev.txt
+            tests/ci/*.py
+      - run: python -m pip install --upgrade pip setuptools wheel
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Build quality suite artifact summary
+        run: |
+          python scripts/ci/summarize_ci_artifacts.py             --artifact-dir $QUALITY_ARTIFACT_DIR             --lane-name "quality suite"             --output-md $QUALITY_ARTIFACT_DIR/artifact-summary.md             --output-json $QUALITY_ARTIFACT_DIR/artifact-summary.json
+          cat $QUALITY_ARTIFACT_DIR/artifact-summary.md >> "$GITHUB_STEP_SUMMARY"
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-suite-summary
+          path: |
+            ${{ env.QUALITY_ARTIFACT_DIR }}/artifact-summary.md
+            ${{ env.QUALITY_ARTIFACT_DIR }}/artifact-summary.json
+            ${{ env.QUALITY_ARTIFACT_DIR }}/pip-audit.log
 
   summary:
     name: quality summary
@@ -307,9 +263,9 @@ jobs:
       - ruff_format
       - mypy_package
       - mypy_tests
-      - pytest
+      - pytest_family_coverage
       - pip_audit
-
+      - summarize_quality
     steps:
       - name: Print job results
         run: |
@@ -319,8 +275,9 @@ jobs:
           echo "ruff_format=${{ needs.ruff_format.result }}"
           echo "mypy_package=${{ needs.mypy_package.result }}"
           echo "mypy_tests=${{ needs.mypy_tests.result }}"
-          echo "pytest=${{ needs.pytest.result }}"
+          echo "pytest_family_coverage=${{ needs.pytest_family_coverage.result }}"
           echo "pip_audit=${{ needs.pip_audit.result }}"
+          echo "summarize_quality=${{ needs.summarize_quality.result }}"
           {
             echo "# Quality suite summary"
             echo ""
@@ -330,12 +287,12 @@ jobs:
             echo "- ruff_format: ${{ needs.ruff_format.result }}"
             echo "- mypy_package: ${{ needs.mypy_package.result }}"
             echo "- mypy_tests: ${{ needs.mypy_tests.result }}"
-            echo "- pytest: ${{ needs.pytest.result }}"
+            echo "- pytest_family_coverage: ${{ needs.pytest_family_coverage.result }}"
             echo "- pip_audit: ${{ needs.pip_audit.result }}"
+            echo "- summarize_quality: ${{ needs.summarize_quality.result }}"
             echo ""
-            echo "Expected rich artifacts: quality-pytest-collect, quality-pytest-report"
+            echo "Expected artifacts: quality-pytest-collect, quality-family-*, quality-suite-summary"
           } >> "$GITHUB_STEP_SUMMARY"
-
       - name: Fail if any job failed
         run: |
           results=(
@@ -345,15 +302,14 @@ jobs:
             "${{ needs.ruff_format.result }}"
             "${{ needs.mypy_package.result }}"
             "${{ needs.mypy_tests.result }}"
-            "${{ needs.pytest.result }}"
+            "${{ needs.pytest_family_coverage.result }}"
             "${{ needs.pip_audit.result }}"
+            "${{ needs.summarize_quality.result }}"
           )
-
           for result in "${results[@]}"; do
             if [ "$result" != "success" ]; then
               echo "At least one quality job failed."
               exit 1
             fi
           done
-
           echo "All quality jobs passed."

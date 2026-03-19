@@ -23,19 +23,6 @@ permissions:
   contents: read
 
 env:
-  NON_SERVICE_TESTS: >-
-    tests/ci/test_authorization_policy.py
-    tests/ci/test_browser_token_flow_matrix.py
-    tests/ci/test_config_matrix.py
-    tests/ci/test_config_runtime.py
-    tests/ci/test_entra_backend_simulation.py
-    tests/ci/test_entra_browser_flow_integration.py
-    tests/ci/test_identity_mapping_matrix.py
-    tests/ci/test_import_smoke.py
-    tests/ci/test_ldap_backend_simulation.py
-    tests/ci/test_permissions_ini_scenarios.py
-    tests/ci/test_runtime_security_and_logging.py
-    tests/ci/test_runtime_smoke.py
   DEEP_ARTIFACT_DIR: .ci-artifacts/deep-validation
   PYTEST_VERBOSE_ARGS: >-
     -vv -rA -s --showlocals --durations=20 --log-cli-level=INFO
@@ -45,74 +32,23 @@ jobs:
     name: test catalog coverage
     runs-on: ubuntu-latest
     timeout-minutes: 20
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-
       - name: Verify every CI test is assigned to exactly one workflow suite
         run: |
           python - <<'PY'
-          from pathlib import Path
           import sys
-
-          discovered = {path.as_posix() for path in Path('tests/ci').glob('test_*.py')}
-          deep_validation = {
-              'tests/ci/test_authorization_policy.py',
-              'tests/ci/test_browser_token_flow_matrix.py',
-              'tests/ci/test_config_matrix.py',
-              'tests/ci/test_config_runtime.py',
-              'tests/ci/test_entra_backend_simulation.py',
-              'tests/ci/test_fab_provider_mirror_latest.py',
-              'tests/ci/test_fab_role_static_mirror.py',
-              'tests/ci/test_entra_browser_flow_integration.py',
-              'tests/ci/test_identity_mapping_matrix.py',
-              'tests/ci/test_import_smoke.py',
-              'tests/ci/test_ldap_backend_simulation.py',
-              'tests/ci/test_permissions_ini_scenarios.py',
-              'tests/ci/test_runtime_security_and_logging.py',
-              'tests/ci/test_runtime_smoke.py',
-          }
-          airflow_suite = {
-              'tests/ci/test_airflow_smoke.py',
-          }
-          idp_suite = {
-              'tests/ci/test_ldap_live_container_integration.py',
-          }
-          fab_suite = {
-              'tests/ci/test_fab_provider_mirror_latest.py',
-          }
-
-          assigned = deep_validation | airflow_suite | idp_suite | fab_suite
+          from rbac_providers_auth_manager.tests.ci.contract_manifest import ALL_ASSIGNED_FILES, discovered_test_files
+          discovered = set(discovered_test_files())
+          assigned = set(ALL_ASSIGNED_FILES)
           missing = sorted(discovered - assigned)
           extra = sorted(assigned - discovered)
-          overlaps = []
-          suites = {
-              'deep_validation': deep_validation,
-              'airflow_suite': airflow_suite,
-              'identity_provider_integration': idp_suite,
-              'fab_provider_validation': fab_suite,
-          }
-          names = list(suites)
-          for idx, left in enumerate(names):
-              for right in names[idx + 1:]:
-                  both = sorted(suites[left] & suites[right])
-                  if both:
-                      overlaps.append((left, right, both))
-
-          if missing or extra or overlaps:
-              print('discovered=', sorted(discovered))
-              print('assigned=', sorted(assigned))
-              if missing:
-                  print('missing=', missing)
-              if extra:
-                  print('extra=', extra)
-              if overlaps:
-                  print('overlaps=', overlaps)
+          if missing or extra:
+              print('missing=', missing)
+              print('extra=', extra)
               sys.exit(1)
-
           print('All tests/ci files are assigned to exactly one CI suite.')
           PY
 
@@ -123,46 +59,43 @@ jobs:
     env:
       PACKAGE_NAME: ${{ inputs['package-name'] }}
       PYTHONPATH: ${{ github.workspace }}/..
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
           cache: pip
           cache-dependency-path: |
             requirements-dev.txt
             tests/ci/*.py
-
-      - name: Upgrade packaging tools
-        run: python -m pip install --upgrade pip setuptools wheel
-
-      - name: Install validation dependencies
-        run: python -m pip install -r requirements-dev.txt
-
-      - name: Compile all Python sources
-        run: python -m compileall -q .
-
+      - run: python -m pip install --upgrade pip setuptools wheel
+      - run: python -m pip install -r requirements-dev.txt
+      - run: python -m compileall -q .
       - name: Import smoke test
         run: |
           set -o pipefail
           mkdir -p "$DEEP_ARTIFACT_DIR"
           python -m pytest $PYTEST_VERBOSE_ARGS tests/ci/test_import_smoke.py \
             --junitxml="$DEEP_ARTIFACT_DIR/import-smoke.xml" 2>&1 | tee "$DEEP_ARTIFACT_DIR/import-smoke.log"
-
-      - name: Upload import smoke logs
-        if: always()
+      - if: always()
+        run: |
+          python scripts/ci/summarize_ci_artifacts.py \
+            --artifact-dir "$DEEP_ARTIFACT_DIR" \
+            --lane-name "deep validation" \
+            --output-md "$DEEP_ARTIFACT_DIR/artifact-summary.md" \
+            --output-json "$DEEP_ARTIFACT_DIR/artifact-summary.json"
+          cat "$DEEP_ARTIFACT_DIR/artifact-summary.md" >> "$GITHUB_STEP_SUMMARY"
+      - if: always()
         uses: actions/upload-artifact@v4
         with:
           name: deep-validation-import-smoke
           path: |
             ${{ env.DEEP_ARTIFACT_DIR }}/import-smoke.log
             ${{ env.DEEP_ARTIFACT_DIR }}/import-smoke.xml
+            ${{ env.DEEP_ARTIFACT_DIR }}/artifact-summary.md
+            ${{ env.DEEP_ARTIFACT_DIR }}/artifact-summary.json
 
   unit-and-mock-tests:
     name: unit + mock tests (${{ matrix.group-name }}, Python ${{ matrix.python-version }})
@@ -172,107 +105,70 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ${{ fromJson(inputs['python-versions']) }}
-        include:
-          - group-name: config-runtime
-            test-files: >-
-              tests/ci/test_config_matrix.py
-              tests/ci/test_config_runtime.py
-              tests/ci/test_fab_role_static_mirror.py
-              tests/ci/test_identity_mapping_matrix.py
-              tests/ci/test_permissions_ini_scenarios.py
-              tests/ci/test_runtime_security_and_logging.py
-              tests/ci/test_runtime_smoke.py
-          - group-name: authorization-routes
-            test-files: >-
-              tests/ci/test_authorization_policy.py
-              tests/ci/test_browser_token_flow_matrix.py
-              tests/ci/test_import_smoke.py
-          - group-name: provider-simulations
-            test-files: >-
-              tests/ci/test_ldap_backend_simulation.py
-              tests/ci/test_entra_backend_simulation.py
-              tests/ci/test_entra_browser_flow_integration.py
+        group-name:
+          - config-runtime
+          - authorization-routes
+          - provider-simulations
     env:
       PACKAGE_NAME: ${{ inputs['package-name'] }}
       PYTHONPATH: ${{ github.workspace }}/..
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
           cache-dependency-path: |
             requirements-dev.txt
             tests/ci/*.py
-
-      - name: Upgrade packaging tools
-        run: python -m pip install --upgrade pip setuptools wheel
-
-      - name: Install validation dependencies
-        run: python -m pip install -r requirements-dev.txt
-
-      - name: Run sharded unit, matrix, and mock tests with coverage and verbose output
+      - run: python -m pip install --upgrade pip setuptools wheel
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Resolve test shard
+        run: echo "TEST_FILES=$(python scripts/ci/list_contract_tests.py --group '${{ matrix.group-name }}')" >> "$GITHUB_ENV"
+      - name: Run shard with coverage
         run: |
           set -o pipefail
           mkdir -p "$DEEP_ARTIFACT_DIR"
           python -m pytest $PYTEST_VERBOSE_ARGS \
             --maxfail=1 \
             --disable-warnings \
-            --junitxml="$DEEP_ARTIFACT_DIR/pytest-${{ matrix.group-name }}-${{ matrix.python-version }}.xml" \
             --cov="$PACKAGE_NAME" \
             --cov-report=term-missing \
             --cov-report=xml:$DEEP_ARTIFACT_DIR/coverage-${{ matrix.group-name }}-${{ matrix.python-version }}.xml \
             --cov-fail-under=${{ inputs['coverage-min'] }} \
-            ${{ matrix.test-files }} 2>&1 | tee "$DEEP_ARTIFACT_DIR/pytest-${{ matrix.group-name }}-${{ matrix.python-version }}.log"
-
-      - name: Upload matrix logs and reports
-        if: always()
+            --junitxml="$DEEP_ARTIFACT_DIR/pytest-${{ matrix.group-name }}-${{ matrix.python-version }}.xml" \
+            $TEST_FILES 2>&1 | tee "$DEEP_ARTIFACT_DIR/pytest-${{ matrix.group-name }}-${{ matrix.python-version }}.log"
+      - if: always()
         uses: actions/upload-artifact@v4
         with:
           name: deep-validation-${{ matrix.group-name }}-py${{ matrix.python-version }}
           path: |
-            ${{ env.DEEP_ARTIFACT_DIR }}/pytest-${{ matrix.group-name }}-${{ matrix.python-version }}.log
-            ${{ env.DEEP_ARTIFACT_DIR }}/pytest-${{ matrix.group-name }}-${{ matrix.python-version }}.xml
             ${{ env.DEEP_ARTIFACT_DIR }}/coverage-${{ matrix.group-name }}-${{ matrix.python-version }}.xml
+            ${{ env.DEEP_ARTIFACT_DIR }}/pytest-${{ matrix.group-name }}-${{ matrix.python-version }}.xml
+            ${{ env.DEEP_ARTIFACT_DIR }}/pytest-${{ matrix.group-name }}-${{ matrix.python-version }}.log
 
   dead-code:
     name: dead code scan (Python 3.13)
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    env:
-      PYTHONPATH: ${{ github.workspace }}/..
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
           cache: pip
           cache-dependency-path: |
             requirements-dev.txt
             tests/ci/*.py
-
-      - name: Upgrade packaging tools
-        run: python -m pip install --upgrade pip setuptools wheel
-
-      - name: Install validation dependencies
-        run: |
+      - run: python -m pip install --upgrade pip setuptools wheel
+      - run: |
           python -m pip install -r requirements-dev.txt
           python -m pip install vulture==2.14
-
-      - name: Run Vulture
-        run: python -m vulture . tests --min-confidence 80
+      - run: python -m vulture . tests --min-confidence 80
 
   summary:
     name: deep validation summary
@@ -283,39 +179,19 @@ jobs:
       - compile-and-import-smoke
       - unit-and-mock-tests
       - dead-code
-
     steps:
-      - name: Print job results
-        run: |
+      - run: |
           echo "test-catalog=${{ needs.test-catalog.result }}"
           echo "compile-and-import-smoke=${{ needs.compile-and-import-smoke.result }}"
           echo "unit-and-mock-tests=${{ needs.unit-and-mock-tests.result }}"
           echo "dead-code=${{ needs.dead-code.result }}"
-          {
-            echo "# Deep validation summary"
-            echo ""
-            echo "- test-catalog: ${{ needs.test-catalog.result }}"
-            echo "- compile-and-import-smoke: ${{ needs.compile-and-import-smoke.result }}"
-            echo "- unit-and-mock-tests: ${{ needs.unit-and-mock-tests.result }}"
-            echo "- dead-code: ${{ needs.dead-code.result }}"
-            echo ""
-            echo "Expected rich artifacts: deep-validation-import-smoke and per-matrix deep-validation-* uploads"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Fail if any deep validation job failed
-        run: |
+      - run: |
           results=(
             "${{ needs.test-catalog.result }}"
             "${{ needs.compile-and-import-smoke.result }}"
             "${{ needs.unit-and-mock-tests.result }}"
             "${{ needs.dead-code.result }}"
           )
-
           for result in "${results[@]}"; do
-            if [ "$result" != "success" ]; then
-              echo "At least one deep validation job failed."
-              exit 1
-            fi
+            [ "$result" = success ] || exit 1
           done
-
-          echo "All deep validation jobs passed."

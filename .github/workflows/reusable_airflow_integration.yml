@@ -80,8 +80,8 @@ jobs:
 
       - name: Install build prerequisites for python-ldap
         run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential libldap2-dev libsasl2-dev libssl-dev curl jq
+          scripts/ci/install_python_ldap_build_deps.sh
+          sudo apt-get install -y curl jq
 
       - name: Resolve Airflow constraints URL
         run: |
@@ -100,142 +100,20 @@ jobs:
 
       - name: Prepare Airflow directories and stage plugin archive
         run: |
-          set -e
+          set -euo pipefail
           mkdir -p "$AIRFLOW_HOME" "$AIRFLOW_DATA_DIR" "$AIRFLOW_PLUGINS_DIR" "$AIRFLOW_DAGS_DIR" "$AIRFLOW_CI_ARTIFACTS"
-
-          python - <<'PY'
-          import os
-          import shutil
-          import zipfile
-          from pathlib import Path
-
-          pkg = os.environ["PACKAGE_NAME"]
-          zip_path = Path(os.environ["AIRFLOW_PLUGIN_ZIP"])
-          permissions_dst = Path(os.environ["AIRFLOW_PERMISSIONS_INI"])
-          build_root = Path(os.environ["RUNNER_TEMP"]) / "plugin-build" / pkg
-
-          if build_root.exists():
-              shutil.rmtree(build_root)
-          build_root.mkdir(parents=True, exist_ok=True)
-
-          allowed = [
-              "__init__.py",
-              "auth_manager.py",
-              "config.py",
-              "api",
-              "authorization",
-              "compatibility",
-              "config_runtime",
-              "core",
-              "entrypoints",
-              "identity",
-              "providers",
-              "runtime",
-              "services",
-              "ui",
-          ]
-
-          for name in allowed:
-              src = Path(name)
-              if not src.exists():
-                  continue
-              dst = build_root / name
-              if src.is_dir():
-                  shutil.copytree(src, dst, dirs_exist_ok=True)
-              else:
-                  dst.parent.mkdir(parents=True, exist_ok=True)
-                  shutil.copy2(src, dst)
-
-          permission_candidates = [
-              Path("config_runtime/permissions.ini"),
-              Path("permissions.ini"),
-              build_root / "config_runtime" / "permissions.ini",
-          ]
-          for candidate in permission_candidates:
-              if candidate.exists():
-                  permissions_dst.parent.mkdir(parents=True, exist_ok=True)
-                  shutil.copy2(candidate, permissions_dst)
-                  break
-          else:
-              raise SystemExit("Could not locate permissions.ini for staging")
-
-          zip_path.parent.mkdir(parents=True, exist_ok=True)
-          with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-              for path in sorted(build_root.rglob("*")):
-                  arcname = Path(pkg) / path.relative_to(build_root)
-                  zf.write(path, arcname)
-
-          print(f"staged plugin archive into {zip_path}")
-          print(f"staged permissions.ini into {permissions_dst}")
-          PY
+          python scripts/ci/bootstrap_airflow_runtime.py
 
       - name: Export plugin archive into PYTHONPATH
         run: echo "PYTHONPATH=${AIRFLOW_PLUGIN_ZIP}" >> "$GITHUB_ENV"
 
       - name: Create hello world DAG fixture
-        run: |
-          cat > "$AIRFLOW_DAGS_DIR/hello_world_ci.py" <<'PY'
-          from __future__ import annotations
-          from datetime import datetime
-          from airflow import DAG
-          from airflow.operators.empty import EmptyOperator
-
-          with DAG(
-              dag_id="hello_world_ci",
-              start_date=datetime(2024, 1, 1),
-              schedule=None,
-              catchup=False,
-              tags=["ci", "hello-world"],
-          ) as dag:
-              start = EmptyOperator(task_id="start")
-              hello = EmptyOperator(task_id="hello")
-              done = EmptyOperator(task_id="done")
-              start >> hello >> done
-          PY
-          echo "==> hello_world_ci.py"
-          cat "$AIRFLOW_DAGS_DIR/hello_world_ci.py"
+        run: python scripts/ci/create_hello_world_dag.py
 
       - name: Create and patch airflow.cfg
         run: |
-          set -e
-          python - <<'PY'
-          import configparser
-          import os
-          from pathlib import Path
-
-          cfg_path = Path(os.environ["AIRFLOW_CONFIG"])
-          cfg_path.parent.mkdir(parents=True, exist_ok=True)
-
-          cfg = configparser.ConfigParser()
-          if cfg_path.exists():
-              cfg.read(cfg_path)
-
-          for section in ("core", "database", "api_auth", "api", "logging"):
-              if section not in cfg:
-                  cfg[section] = {}
-
-          cfg["core"]["auth_manager"] = "rbac_providers_auth_manager.auth_manager.RbacAuthManager"
-          cfg["core"]["itim_ldap_permissions_ini"] = os.environ["AIRFLOW_PERMISSIONS_INI"]
-          cfg["core"]["plugins_folder"] = os.environ["AIRFLOW_PLUGINS_DIR"]
-          cfg["core"]["dags_folder"] = os.environ["AIRFLOW_DAGS_DIR"]
-          cfg["core"]["lazy_load_plugins"] = "False"
-          cfg["core"]["load_examples"] = "False"
-          cfg["database"]["sql_alchemy_conn"] = f"sqlite:///{os.environ['AIRFLOW_DB_PATH']}"
-          cfg["api"]["base_url"] = "http://127.0.0.1:8080"
-          cfg["logging"]["logging_level"] = "DEBUG"
-
-          cfg["api_auth"]["jwt_secret"] = "ci-only-jwt-secret-not-for-production-change-me-0123456789"
-          cfg["api_auth"]["jwt_algorithm"] = "HS512"
-          cfg["api_auth"]["jwt_audience"] = "urn:airflow.apache.org:task"
-
-          with cfg_path.open("w", encoding="utf-8") as fh:
-              cfg.write(fh)
-
-          print(f"patched airflow.cfg at {cfg_path}")
-          PY
-
-          echo "==> airflow.cfg"
-          cat "$AIRFLOW_CONFIG"
+          set -euo pipefail
+          python scripts/ci/write_airflow_ci_config.py
 
       - name: Airflow info
         run: |
@@ -265,17 +143,42 @@ jobs:
           print("loaded auth manager =", RbacAuthManager.__name__)
           PY
 
+
+      - name: Negative runtime smoke for missing auth manager class
+        run: |
+          set -euo pipefail
+          BAD_CFG="$AIRFLOW_CI_ARTIFACTS/airflow-bad-auth-manager.cfg"
+          cp "$AIRFLOW_CONFIG" "$BAD_CFG"
+          python - <<'PY'
+          import configparser
+          import os
+          from pathlib import Path
+
+          cfg_path = Path(os.environ["AIRFLOW_CI_ARTIFACTS"]) / "airflow-bad-auth-manager.cfg"
+          cfg = configparser.ConfigParser()
+          cfg.read(cfg_path)
+          cfg["core"]["auth_manager"] = "missing.module.DoesNotExist"
+          with cfg_path.open("w", encoding="utf-8") as fh:
+              cfg.write(fh)
+          print(f"wrote bad auth manager cfg to {cfg_path}")
+          PY
+
+          if AIRFLOW_CONFIG="$BAD_CFG" python -W "ignore:Could not import graphviz:UserWarning" -m airflow info >"$AIRFLOW_CI_ARTIFACTS/airflow-bad-auth-manager.log" 2>&1; then
+            echo "expected bad auth manager config to fail but command succeeded"
+            cat "$AIRFLOW_CI_ARTIFACTS/airflow-bad-auth-manager.log" || true
+            exit 1
+          fi
+
+          cat "$AIRFLOW_CI_ARTIFACTS/airflow-bad-auth-manager.log"
+          grep -E "missing\.module|DoesNotExist|auth_manager|ImportError|ModuleNotFoundError" "$AIRFLOW_CI_ARTIFACTS/airflow-bad-auth-manager.log"
+
       - name: Airflow DB bootstrap smoke with verbose logs
         run: |
           set -o pipefail
           AIRFLOW__LOGGING__LOGGING_LEVEL=DEBUG python -m airflow db migrate 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/airflow-db-migrate.log"
 
-      - name: Discover hello world DAG and task relationships
-        run: |
-          set -o pipefail
-          python -m airflow dags list 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/airflow-dags-list.log"
-          python -m airflow tasks list hello_world_ci 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/airflow-tasks-list.log"
-          python -m airflow dags show hello_world_ci 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/airflow-dag-show.log"
+      - name: Discover hello world DAG and tasks using plain-text Airflow CLI
+        run: scripts/ci/check_airflow_discovery.sh
 
       - name: Execute hello world DAG test run
         run: |
@@ -327,6 +230,28 @@ jobs:
           print("api version payload keys:", sorted(version.keys()))
           PY
 
+      - name: Validate login page and protected API behavior
+        run: |
+          set -euo pipefail
+          LOGIN_HTTP_CODE=$(curl -sS -o "$AIRFLOW_CI_ARTIFACTS/auth-login.html" -w "%{http_code}" http://127.0.0.1:8080/auth/login/)
+          PROTECTED_HTTP_CODE=$(curl -sS -o "$AIRFLOW_CI_ARTIFACTS/protected-dags.txt" -w "%{http_code}" http://127.0.0.1:8080/api/v2/dags)
+          LOGOUT_HTTP_CODE=$(curl -sS -o /dev/null -w "%{http_code}" http://127.0.0.1:8080/auth/logout)
+
+          echo "login_http_code=${LOGIN_HTTP_CODE}" | tee "$AIRFLOW_CI_ARTIFACTS/auth-surface.log"
+          echo "protected_http_code=${PROTECTED_HTTP_CODE}" | tee -a "$AIRFLOW_CI_ARTIFACTS/auth-surface.log"
+          echo "logout_http_code=${LOGOUT_HTTP_CODE}" | tee -a "$AIRFLOW_CI_ARTIFACTS/auth-surface.log"
+
+          test "$LOGIN_HTTP_CODE" = "200"
+          grep -E "Sign In|LOGIN|login" "$AIRFLOW_CI_ARTIFACTS/auth-login.html"
+          case "$PROTECTED_HTTP_CODE" in
+            401|403) ;;
+            *) echo "Expected 401 or 403 for anonymous protected endpoint, got ${PROTECTED_HTTP_CODE}" >&2; exit 1 ;;
+          esac
+          case "$LOGOUT_HTTP_CODE" in
+            302|307) ;;
+            *) echo "Expected redirect status for logout, got ${LOGOUT_HTTP_CODE}" >&2; exit 1 ;;
+          esac
+
       - name: Run Airflow-aware smoke tests with verbose output
         run: |
           set -o pipefail
@@ -358,8 +283,21 @@ jobs:
             echo "- api-server.log"
             echo "- health.json"
             echo "- version.json"
+            echo "- auth-login.html"
+            echo "- protected-dags.txt"
+            echo "- auth-surface.log"
             echo "- pytest-airflow.log"
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Build airflow integration artifact summary
+        if: always()
+        run: |
+          python scripts/ci/summarize_ci_artifacts.py \
+            --artifact-dir $AIRFLOW_CI_ARTIFACTS \
+            --lane-name "airflow integration" \
+            --output-md $AIRFLOW_CI_ARTIFACTS/artifact-summary.md \
+            --output-json $AIRFLOW_CI_ARTIFACTS/artifact-summary.json
+          cat $AIRFLOW_CI_ARTIFACTS/artifact-summary.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload Airflow integration artifacts
         if: always()

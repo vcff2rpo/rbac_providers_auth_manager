@@ -78,6 +78,11 @@ jobs:
           print("apache-airflow=", version("apache-airflow"))
           PY
 
+      - name: Generate golden RBAC snapshot diff against official FAB provider
+        run: |
+          set -o pipefail
+          python scripts/ci/validate_fab_mirror.py 2>&1 | tee "$FAB_ARTIFACT_DIR/rbac-snapshot.log"
+
       - name: Validate mirrored non-DB role coverage against official FAB provider
         run: |
           set -o pipefail
@@ -86,6 +91,16 @@ jobs:
             --disable-warnings \
             --junitxml="$FAB_ARTIFACT_DIR/pytest-fab-provider.xml" \
             tests/ci/test_fab_provider_mirror_latest.py 2>&1 | tee "$FAB_ARTIFACT_DIR/pytest-fab-provider.log"
+
+      - name: Build fab provider validation artifact summary
+        if: always()
+        run: |
+          python scripts/ci/summarize_ci_artifacts.py \
+            --artifact-dir $FAB_ARTIFACT_DIR \
+            --lane-name "fab provider validation" \
+            --output-md $FAB_ARTIFACT_DIR/artifact-summary.md \
+            --output-json $FAB_ARTIFACT_DIR/artifact-summary.json
+          cat $FAB_ARTIFACT_DIR/artifact-summary.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload FAB provider validation artifacts
         if: always()

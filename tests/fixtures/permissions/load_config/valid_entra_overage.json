@@ -1,0 +1,12 @@
+{
+  "kind": "load_config",
+  "expect": "success",
+  "env": {
+    "ENTRA_CLIENT_SECRET": "dummy-entra-secret"
+  },
+  "assertions": {
+    "general.enable_entra_id": true,
+    "security.allow_graph_group_fallback": true,
+    "entra_id.graph_fetch_groups_on_overage": true
+  }
+}

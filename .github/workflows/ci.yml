@@ -18,6 +18,26 @@ on:
         required: true
         default: true
         type: boolean
+      run_fab_provider_validation:
+        description: Run official FAB provider 3.5.0 mirror validation
+        required: true
+        default: true
+        type: boolean
+      run_nightly_compatibility:
+        description: Run scheduled-style compatibility matrix in manual CI
+        required: true
+        default: false
+        type: boolean
+      run_external_real_validation:
+        description: Run optional DB-backed and real external identity validation lane
+        required: true
+        default: false
+        type: boolean
+      require_external_secrets:
+        description: Fail instead of skip when external LDAP/Entra variables are missing
+        required: true
+        default: false
+        type: boolean
       create_review_pr:
         description: Create a new review branch and PR to main only after all enabled gates succeed
         required: true
@@ -61,6 +81,34 @@ jobs:
       package-name: rbac_providers_auth_manager
       python-version: "3.13"
 
+  fab_provider_validation:
+    if: ${{ inputs.run_fab_provider_validation }}
+    uses: ./.github/workflows/reusable_fab_provider_validation.yml
+    with:
+      package-name: rbac_providers_auth_manager
+      airflow-version: "3.1.8"
+      fab-provider-version: "3.5.0"
+      python-version: "3.13"
+
+  nightly_compatibility:
+    if: ${{ inputs.run_nightly_compatibility }}
+    uses: ./.github/workflows/reusable_nightly_compatibility.yml
+    with:
+      package-name: rbac_providers_auth_manager
+      airflow-versions: '["3.1.8"]'
+      fab-provider-versions: '["3.5.0"]'
+      python-versions: '["3.12", "3.13"]'
+
+  external_real_validation:
+    if: ${{ inputs.run_external_real_validation }}
+    uses: ./.github/workflows/reusable_external_real_validation.yml
+    with:
+      package-name: rbac_providers_auth_manager
+      airflow-version: "3.1.8"
+      fab-provider-version: "3.5.0"
+      python-version: "3.13"
+      require-external-secrets: ${{ inputs.require_external_secrets }}
+
   review_pr_gate:
     if: ${{ always() && github.ref_name == 'v86' }}
     needs:
@@ -68,6 +116,9 @@ jobs:
       - deep_validation
       - airflow_suite
       - identity_provider_integration
+      - fab_provider_validation
+      - nightly_compatibility
+      - external_real_validation
     permissions:
       contents: write
       pull-requests: write
@@ -87,5 +138,11 @@ jobs:
       airflow-suite-result: ${{ inputs.run_airflow && needs.airflow_suite.result || 'skipped' }}
       idp-enabled: ${{ inputs.run_idp_integration }}
       idp-result: ${{ inputs.run_idp_integration && needs.identity_provider_integration.result || 'skipped' }}
+      fab-provider-enabled: ${{ inputs.run_fab_provider_validation }}
+      fab-provider-result: ${{ inputs.run_fab_provider_validation && needs.fab_provider_validation.result || 'skipped' }}
+      nightly-compatibility-enabled: ${{ inputs.run_nightly_compatibility }}
+      nightly-compatibility-result: ${{ inputs.run_nightly_compatibility && needs.nightly_compatibility.result || 'skipped' }}
+      external-real-validation-enabled: ${{ inputs.run_external_real_validation }}
+      external-real-validation-result: ${{ inputs.run_external_real_validation && needs.external_real_validation.result || 'skipped' }}
       run-url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       source-sha: ${{ github.sha }}

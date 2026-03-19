@@ -1,0 +1,123 @@
+name: reusable nightly compatibility
+
+on:
+  workflow_call:
+    inputs:
+      package-name:
+        description: Python package name
+        required: false
+        type: string
+        default: rbac_providers_auth_manager
+      airflow-versions:
+        description: JSON array of Airflow versions
+        required: false
+        type: string
+        default: '["3.1.8"]'
+      fab-provider-versions:
+        description: JSON array of FAB provider versions
+        required: false
+        type: string
+        default: '["3.5.0"]'
+      python-versions:
+        description: JSON array of Python versions
+        required: false
+        type: string
+        default: '["3.12", "3.13"]'
+
+permissions:
+  contents: read
+
+jobs:
+  compatibility-matrix:
+    name: compatibility matrix (Airflow ${{ matrix.airflow-version }}, FAB ${{ matrix.fab-provider-version }}, Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        airflow-version: ${{ fromJson(inputs['airflow-versions']) }}
+        fab-provider-version: ${{ fromJson(inputs['fab-provider-versions']) }}
+        python-version: ${{ fromJson(inputs['python-versions']) }}
+    env:
+      PACKAGE_NAME: ${{ inputs['package-name'] }}
+      AIRFLOW_VERSION: ${{ matrix.airflow-version }}
+      FAB_PROVIDER_VERSION: ${{ matrix.fab-provider-version }}
+      PYTHONPATH: ${{ github.workspace }}/..
+      NIGHTLY_ARTIFACT_DIR: .ci-artifacts/nightly-compatibility/${{ matrix.python-version }}-airflow-${{ matrix.airflow-version }}-fab-${{ matrix.fab-provider-version }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: |
+            requirements-fab-provider-validation.txt
+            tests/ci/*.py
+
+      - name: Upgrade packaging tools
+        run: python -m pip install --upgrade pip setuptools wheel
+
+      - name: Resolve Airflow constraints URL
+        run: |
+          echo "AIRFLOW_CONSTRAINTS_URL=https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-${{ matrix.python-version }}.txt" >> "$GITHUB_ENV"
+
+      - name: Install compatibility matrix dependencies
+        run: |
+          python -m pip install "apache-airflow==${AIRFLOW_VERSION}" --constraint "${AIRFLOW_CONSTRAINTS_URL}"
+          python -m pip install "apache-airflow-providers-fab==${FAB_PROVIDER_VERSION}" --constraint "${AIRFLOW_CONSTRAINTS_URL}"
+          python -m pip install -r requirements-fab-provider-validation.txt
+
+      - name: Create compatibility artifact directory
+        run: mkdir -p "$NIGHTLY_ARTIFACT_DIR"
+
+      - name: Capture compatibility target versions
+        run: |
+          set -o pipefail
+          python -m airflow version 2>&1 | tee "$NIGHTLY_ARTIFACT_DIR/airflow-version.log"
+          python - <<'PY' 2>&1 | tee "$NIGHTLY_ARTIFACT_DIR/fab-provider-version.log"
+          from importlib.metadata import version
+          print("apache-airflow=", version("apache-airflow"))
+          print("apache-airflow-providers-fab=", version("apache-airflow-providers-fab"))
+          PY
+
+      - name: Generate RBAC snapshot diff
+        run: |
+          set -o pipefail
+          python scripts/ci/validate_fab_mirror.py 2>&1 | tee "$NIGHTLY_ARTIFACT_DIR/rbac-snapshot.log"
+
+      - name: Run provider-backed mirror tests
+        run: |
+          set -o pipefail
+          python -m pytest -vv -rA -s --showlocals --durations=20 --log-cli-level=INFO \
+            --maxfail=1 \
+            --disable-warnings \
+            --junitxml="$NIGHTLY_ARTIFACT_DIR/pytest-fab-matrix.xml" \
+            tests/ci/test_fab_provider_mirror_latest.py 2>&1 | tee "$NIGHTLY_ARTIFACT_DIR/pytest-fab-matrix.log"
+
+      - name: Upload compatibility artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-compatibility-py${{ matrix.python-version }}-airflow-${{ matrix.airflow-version }}-fab-${{ matrix.fab-provider-version }}
+          path: ${{ env.NIGHTLY_ARTIFACT_DIR }}
+
+  summary:
+    name: nightly compatibility summary
+    runs-on: ubuntu-latest
+    if: ${{ always() }}
+    needs:
+      - compatibility-matrix
+
+    steps:
+      - name: Print summary
+        run: |
+          echo "compatibility-matrix=${{ needs.compatibility-matrix.result }}"
+          if [ "${{ needs.compatibility-matrix.result }}" != "success" ]; then
+            exit 1
+          fi
