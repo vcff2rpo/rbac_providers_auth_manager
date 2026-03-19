@@ -38,7 +38,9 @@ def _install_airflow_stubs() -> None:
         _ensure_module(name)
 
     class _Conf:
-        def get(self, *_args: object, fallback: object = None, **_kwargs: object) -> object:
+        def get(
+            self, *_args: object, fallback: object = None, **_kwargs: object
+        ) -> object:
             return fallback
 
         def getint(self, *_args: object, fallback: int = 0, **_kwargs: object) -> int:
@@ -132,7 +134,9 @@ def _install_airflow_stubs() -> None:
         dict,
     )
 
-    _set_module_attr("airflow.api_fastapi.auth.managers.models.base_user", "BaseUser", BaseUser)
+    _set_module_attr(
+        "airflow.api_fastapi.auth.managers.models.base_user", "BaseUser", BaseUser
+    )
 
     class AccessView:
         CLUSTER_ACTIVITY = "CLUSTER_ACTIVITY"
@@ -182,10 +186,14 @@ def _install_airflow_stubs() -> None:
         )
 
     _set_module_attr(
-        "airflow.providers.common.compat.assets", "AssetAliasDetails", type("AssetAliasDetails", (), {})
+        "airflow.providers.common.compat.assets",
+        "AssetAliasDetails",
+        type("AssetAliasDetails", (), {}),
     )
     _set_module_attr(
-        "airflow.providers.common.compat.assets", "AssetDetails", type("AssetDetails", (), {})
+        "airflow.providers.common.compat.assets",
+        "AssetDetails",
+        type("AssetDetails", (), {}),
     )
 
     class Variable:

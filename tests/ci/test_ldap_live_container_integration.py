@@ -24,7 +24,9 @@ def _ldap_cfg() -> LdapConfig:
         uri=_require_env("LDAP_TEST_URI"),
         bind_dn=_require_env("LDAP_TEST_BIND_DN", "cn=admin,dc=example,dc=org"),
         bind_password=_require_env("LDAP_TEST_BIND_PASSWORD", "adminpassword"),
-        user_base_dn=_require_env("LDAP_TEST_USER_BASE_DN", "ou=users,dc=example,dc=org"),
+        user_base_dn=_require_env(
+            "LDAP_TEST_USER_BASE_DN", "ou=users,dc=example,dc=org"
+        ),
         user_filter=_require_env("LDAP_TEST_USER_FILTER", "(uid={username})"),
         group_attribute=os.getenv("LDAP_TEST_GROUP_ATTRIBUTE", "memberOf"),
         username_dn_format=None,

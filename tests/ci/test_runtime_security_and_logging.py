@@ -36,7 +36,9 @@ def test_resolve_secret_reference_rejects_plaintext_by_default() -> None:
         resolve_secret_reference("supersecret")
 
 
-def test_verify_hmac_integrity_accepts_valid_signature(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_verify_hmac_integrity_accepts_valid_signature(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     config_path = tmp_path / "permissions.ini"
     config_path.write_text("[general]\n", encoding="utf-8")
 
@@ -53,7 +55,9 @@ def test_verify_hmac_integrity_accepts_valid_signature(tmp_path: Path, monkeypat
     verify_hmac_integrity(config_path)
 
 
-def test_verify_hmac_integrity_rejects_invalid_signature(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_verify_hmac_integrity_rejects_invalid_signature(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     config_path = tmp_path / "permissions.ini"
     config_path.write_text("[general]\n", encoding="utf-8")
     sig_path = tmp_path / "permissions.ini.sig"
@@ -61,7 +65,9 @@ def test_verify_hmac_integrity_rejects_invalid_signature(tmp_path: Path, monkeyp
 
     monkeypatch.setenv("AIRFLOW_ITIM_LDAP_CONFIG_HMAC_KEY", "top-secret-key")
 
-    with pytest.raises(SecurityConfigError, match="Config integrity verification failed"):
+    with pytest.raises(
+        SecurityConfigError, match="Config integrity verification failed"
+    ):
         verify_hmac_integrity(config_path)
 
 

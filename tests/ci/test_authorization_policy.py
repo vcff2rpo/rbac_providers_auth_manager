@@ -79,9 +79,24 @@ def test_resource_name_preserves_prefixed_resources_and_scopes_dag_ids() -> None
 def test_rbac_policy_honors_global_and_scoped_dag_permissions() -> None:
     policy = RbacPolicy(_build_config())
 
-    assert policy.is_allowed(roles=("Viewer",), action=ACTION_CAN_READ, resource=RESOURCE_DAG) is True
-    assert policy.is_allowed(roles=("Op",), action=ACTION_CAN_READ, resource="DAG:finance_daily") is True
-    assert policy.is_allowed(roles=("Op",), action=ACTION_CAN_READ, resource="DAG:other_dag") is False
+    assert (
+        policy.is_allowed(
+            roles=("Viewer",), action=ACTION_CAN_READ, resource=RESOURCE_DAG
+        )
+        is True
+    )
+    assert (
+        policy.is_allowed(
+            roles=("Op",), action=ACTION_CAN_READ, resource="DAG:finance_daily"
+        )
+        is True
+    )
+    assert (
+        policy.is_allowed(
+            roles=("Op",), action=ACTION_CAN_READ, resource="DAG:other_dag"
+        )
+        is False
+    )
 
 
 def test_rbac_policy_applies_role_filters_when_context_is_available() -> None:
@@ -103,18 +118,24 @@ def test_rbac_policy_applies_role_filters_when_context_is_available() -> None:
         )
     )
 
-    assert policy.is_allowed(
-        roles=("Scoped",),
-        action=ACTION_CAN_READ,
-        resource=RESOURCE_DAG,
-        context=matching_context,
-    ) is True
-    assert policy.is_allowed(
-        roles=("Scoped",),
-        action=ACTION_CAN_READ,
-        resource=RESOURCE_DAG,
-        context=non_matching_context,
-    ) is False
+    assert (
+        policy.is_allowed(
+            roles=("Scoped",),
+            action=ACTION_CAN_READ,
+            resource=RESOURCE_DAG,
+            context=matching_context,
+        )
+        is True
+    )
+    assert (
+        policy.is_allowed(
+            roles=("Scoped",),
+            action=ACTION_CAN_READ,
+            resource=RESOURCE_DAG,
+            context=non_matching_context,
+        )
+        is False
+    )
 
 
 def test_map_dns_to_roles_respects_strict_permissions_mode() -> None:
