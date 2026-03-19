@@ -16,7 +16,7 @@ EXCLUDED_DB_BACKED_RESOURCES = {
 
 @pytest.fixture(scope="module")
 def provider_role_permissions() -> dict[str, set[tuple[str, str]]]:
-    airflow = pytest.importorskip("airflow")
+    pytest.importorskip("airflow")
     provider_mod = pytest.importorskip(
         "airflow.providers.fab.auth_manager.security_manager.override"
     )

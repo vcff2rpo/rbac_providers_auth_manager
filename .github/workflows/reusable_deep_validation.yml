@@ -40,7 +40,14 @@ jobs:
         run: |
           python - <<'PY'
           import sys
-          from rbac_providers_auth_manager.tests.ci.contract_manifest import ALL_ASSIGNED_FILES, discovered_test_files
+          from pathlib import Path
+
+          repo_root = Path.cwd()
+          if str(repo_root) not in sys.path:
+              sys.path.insert(0, str(repo_root))
+
+          from tests.ci.contract_manifest import ALL_ASSIGNED_FILES, discovered_test_files
+
           discovered = set(discovered_test_files())
           assigned = set(ALL_ASSIGNED_FILES)
           missing = sorted(discovered - assigned)

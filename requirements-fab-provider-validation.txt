@@ -1,0 +1,2 @@
+pytest==8.4.2
+apache-airflow-providers-fab==3.5.0
