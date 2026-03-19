@@ -43,6 +43,11 @@ on:
         required: false
         type: string
         default: unknown
+      fab_provider_result:
+        description: Result of FAB provider mirror validation job
+        required: false
+        type: string
+        default: unknown
       run_url:
         description: URL of the current workflow run
         required: false
@@ -186,6 +191,7 @@ jobs:
               `- deep-validation: ${{ inputs.deep_validation_result }}`,
               `- airflow-integration: ${{ inputs.airflow_result }}`,
               `- identity-provider-integration: ${{ inputs.idp_result }}`,
+              `- fab-provider-validation: ${{ inputs.fab_provider_result }}`,
               '',
               'This PR branch points to the tested source commit and does not add post-test review artifacts.',
             ].join('\n');

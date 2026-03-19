@@ -19,6 +19,7 @@ env:
     tests/ci/test_authorization_policy.py
     tests/ci/test_browser_token_flow_matrix.py
     tests/ci/test_config_matrix.py
+    tests/ci/test_fab_role_static_mirror.py
     tests/ci/test_config_runtime.py
     tests/ci/test_entra_backend_simulation.py
     tests/ci/test_entra_browser_flow_integration.py

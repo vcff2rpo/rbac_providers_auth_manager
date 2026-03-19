@@ -68,6 +68,16 @@ on:
         required: false
         type: string
         default: skipped
+      fab-provider-enabled:
+        description: Whether the FAB provider mirror validation lane was enabled
+        required: false
+        type: boolean
+        default: false
+      fab-provider-result:
+        description: Result of the FAB provider mirror validation lane
+        required: false
+        type: string
+        default: skipped
       run-url:
         description: URL of the current workflow run
         required: false
@@ -124,6 +134,11 @@ jobs:
             REASONS+=("idp=${{ inputs.idp-result }}")
           fi
 
+          if [ "${{ inputs.fab-provider-enabled }}" = "true" ] && [ "${{ inputs.fab-provider-result }}" != "success" ]; then
+            SHOULD_OPEN_PR=false
+            REASONS+=("fab_provider=${{ inputs.fab-provider-result }}")
+          fi
+
           if [ "${SHOULD_OPEN_PR}" = "true" ]; then
             GATE_REASON="all_enabled_gates_passed"
           else
@@ -154,5 +169,6 @@ jobs:
       deep_validation_result: ${{ inputs.deep-validation-enabled && inputs.deep-validation-result || 'skipped' }}
       airflow_result: ${{ inputs.airflow-enabled && inputs.airflow-result || 'skipped' }}
       idp_result: ${{ inputs.idp-enabled && inputs.idp-result || 'skipped' }}
+      fab_provider_result: ${{ inputs.fab-provider-enabled && inputs.fab-provider-result || 'skipped' }}
       run_url: ${{ inputs.run-url }}
       source_sha: ${{ inputs.source-sha }}

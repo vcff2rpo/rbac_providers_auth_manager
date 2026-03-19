@@ -83,7 +83,7 @@ _RESOURCE_ALIASES: dict[str, str] = {
     "my password": RESOURCE_MY_PASSWORD,
     "admin": RESOURCE_ADMIN_MENU,
     "browse": RESOURCE_BROWSE_MENU,
-    "docs": RESOURCE_DOCS,
+    "docs": RESOURCE_DOCS_MENU,
     "documentation": RESOURCE_DOCS,
     "audit log": RESOURCE_AUDIT_LOG,
     "audit logs": RESOURCE_AUDIT_LOG,

@@ -65,6 +65,8 @@ jobs:
               'tests/ci/test_config_matrix.py',
               'tests/ci/test_config_runtime.py',
               'tests/ci/test_entra_backend_simulation.py',
+              'tests/ci/test_fab_provider_mirror_latest.py',
+              'tests/ci/test_fab_role_static_mirror.py',
               'tests/ci/test_entra_browser_flow_integration.py',
               'tests/ci/test_identity_mapping_matrix.py',
               'tests/ci/test_import_smoke.py',
@@ -79,8 +81,11 @@ jobs:
           idp_suite = {
               'tests/ci/test_ldap_live_container_integration.py',
           }
+          fab_suite = {
+              'tests/ci/test_fab_provider_mirror_latest.py',
+          }
 
-          assigned = deep_validation | airflow_suite | idp_suite
+          assigned = deep_validation | airflow_suite | idp_suite | fab_suite
           missing = sorted(discovered - assigned)
           extra = sorted(assigned - discovered)
           overlaps = []
@@ -88,6 +93,7 @@ jobs:
               'deep_validation': deep_validation,
               'airflow_suite': airflow_suite,
               'identity_provider_integration': idp_suite,
+              'fab_provider_validation': fab_suite,
           }
           names = list(suites)
           for idx, left in enumerate(names):
@@ -171,6 +177,7 @@ jobs:
             test-files: >-
               tests/ci/test_config_matrix.py
               tests/ci/test_config_runtime.py
+              tests/ci/test_fab_role_static_mirror.py
               tests/ci/test_identity_mapping_matrix.py
               tests/ci/test_permissions_ini_scenarios.py
               tests/ci/test_runtime_security_and_logging.py
