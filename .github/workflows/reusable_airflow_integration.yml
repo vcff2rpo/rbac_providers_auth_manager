@@ -275,7 +275,16 @@ jobs:
           set -o pipefail
           python -m airflow dags list 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/airflow-dags-list.log"
           python -m airflow tasks list hello_world_ci 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/airflow-tasks-list.log"
-          python -m airflow dags show hello_world_ci 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/airflow-dag-show.log"
+
+          if python -c 'import importlib.util, sys; sys.exit(0 if importlib.util.find_spec("graphviz") else 1)'
+          then
+            python -m airflow dags show hello_world_ci 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/airflow-dag-show.log"
+          else
+            {
+              echo "Graphviz python package not installed; skipping 'airflow dags show'."
+              echo "DAG discovery remains covered by 'airflow dags list' and 'airflow tasks list'."
+            } | tee "$AIRFLOW_CI_ARTIFACTS/airflow-dag-show.log"
+          fi
 
       - name: Execute hello world DAG test run
         run: |
