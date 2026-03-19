@@ -21,7 +21,7 @@ jobs:
   identity-provider-integration:
     name: identity provider integration (Python ${{ inputs.python-version }})
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     env:
       PACKAGE_NAME: ${{ inputs.package-name }}
       PYTHONPATH: ${{ github.workspace }}/..
@@ -33,6 +33,7 @@ jobs:
       LDAP_TEST_USER_FILTER: (uid={username})
       LDAP_TEST_USERNAME: user01
       LDAP_TEST_PASSWORD: bitnami1
+      IDP_ARTIFACT_DIR: .ci-artifacts/idp
 
     services:
       ldap:
@@ -48,7 +49,7 @@ jobs:
           LDAP_GROUP_OU: groups
           LDAP_GROUP: readers
           LDAP_ALLOW_ANON_BINDING: no
-          BITNAMI_DEBUG: "true"
+          SYMAS_DEBUG: "true"
         ports:
           - 1389:1389
 
@@ -82,7 +83,8 @@ jobs:
 
       - name: Wait for LDAP service
         run: |
-          python - <<'PY'
+          mkdir -p "$IDP_ARTIFACT_DIR"
+          python - <<'PY' 2>&1 | tee "$IDP_ARTIFACT_DIR/ldap-wait.log"
           import socket
           import time
 
@@ -102,7 +104,7 @@ jobs:
 
       - name: LDAP bind smoke
         run: |
-          python - <<'PY'
+          python - <<'PY' 2>&1 | tee "$IDP_ARTIFACT_DIR/ldap-bind.log"
           import ldap
           import os
           import time
@@ -131,8 +133,38 @@ jobs:
               raise SystemExit("LDAP bind smoke never succeeded")
           PY
 
-      - name: Run identity-provider integration tests
+      - name: Run identity-provider integration tests with detailed logs
         run: |
-          python -m pytest -q --maxfail=1 --disable-warnings \
+          set -o pipefail
+          python -m pytest -vv -rA -s --showlocals --durations=20 --log-cli-level=INFO \
+            --maxfail=1 \
+            --disable-warnings \
+            --junitxml="$IDP_ARTIFACT_DIR/pytest-idp.xml" \
             tests/ci/test_ldap_live_container_integration.py \
-            tests/ci/test_entra_browser_flow_integration.py
+            tests/ci/test_entra_browser_flow_integration.py 2>&1 | tee "$IDP_ARTIFACT_DIR/pytest-idp.log"
+
+      - name: Capture LDAP container logs
+        if: always()
+        run: |
+          docker ps --format '{{.ID}} {{.Image}} {{.Names}}' | tee "$IDP_ARTIFACT_DIR/docker-ps.log"
+          container_id="$(docker ps -q --filter ancestor=symas/openldap:latest | head -n1 || true)"
+          if [ -n "$container_id" ]; then
+            docker logs "$container_id" > "$IDP_ARTIFACT_DIR/ldap-container.log" 2>&1 || true
+          else
+            echo "No LDAP container found for symas/openldap:latest" > "$IDP_ARTIFACT_DIR/ldap-container.log"
+          fi
+          {
+            echo "# Identity provider integration summary"
+            echo ""
+            echo "- ldap-wait.log"
+            echo "- ldap-bind.log"
+            echo "- pytest-idp.log"
+            echo "- ldap-container.log"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload identity-provider artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: identity-provider-integration-py${{ inputs.python-version }}
+          path: ${{ env.IDP_ARTIFACT_DIR }}

@@ -25,7 +25,7 @@ jobs:
   airflow-integration:
     name: airflow integration (Python ${{ inputs.python-version }})
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 50
     env:
       PACKAGE_NAME: ${{ inputs.package-name }}
       AIRFLOW_VERSION: ${{ inputs.airflow-version }}
@@ -52,9 +52,11 @@ jobs:
           echo "AIRFLOW_CONFIG=${RUNNER_TEMP}/airflow-home/airflow.cfg" >> "$GITHUB_ENV"
           echo "AIRFLOW_DATA_DIR=${RUNNER_TEMP}/airflow-home/data" >> "$GITHUB_ENV"
           echo "AIRFLOW_PLUGINS_DIR=${RUNNER_TEMP}/airflow-home/plugins" >> "$GITHUB_ENV"
+          echo "AIRFLOW_DAGS_DIR=${RUNNER_TEMP}/airflow-home/dags" >> "$GITHUB_ENV"
           echo "AIRFLOW_DB_PATH=${RUNNER_TEMP}/airflow-home/airflow.db" >> "$GITHUB_ENV"
           echo "AIRFLOW_PLUGIN_ZIP=${RUNNER_TEMP}/airflow-home/plugins/rbac_providers_auth_manager.zip" >> "$GITHUB_ENV"
           echo "AIRFLOW_PERMISSIONS_INI=${RUNNER_TEMP}/airflow-home/plugins/rbac_providers_auth_manager_permissions.ini" >> "$GITHUB_ENV"
+          echo "AIRFLOW_CI_ARTIFACTS=${RUNNER_TEMP}/airflow-artifacts" >> "$GITHUB_ENV"
 
       - name: Show context
         run: |
@@ -66,10 +68,12 @@ jobs:
           echo "AIRFLOW_HOME:            $AIRFLOW_HOME"
           echo "AIRFLOW_CONFIG:          $AIRFLOW_CONFIG"
           echo "AIRFLOW_PLUGINS_DIR:     $AIRFLOW_PLUGINS_DIR"
+          echo "AIRFLOW_DAGS_DIR:        $AIRFLOW_DAGS_DIR"
           echo "AIRFLOW_DATA_DIR:        $AIRFLOW_DATA_DIR"
           echo "AIRFLOW_DB_PATH:         $AIRFLOW_DB_PATH"
           echo "AIRFLOW_PLUGIN_ZIP:      $AIRFLOW_PLUGIN_ZIP"
           echo "AIRFLOW_PERMISSIONS_INI: $AIRFLOW_PERMISSIONS_INI"
+          echo "AIRFLOW_CI_ARTIFACTS:    $AIRFLOW_CI_ARTIFACTS"
 
       - name: Upgrade packaging tools
         run: python -m pip install --upgrade pip setuptools wheel
@@ -77,7 +81,7 @@ jobs:
       - name: Install build prerequisites for python-ldap
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential libldap2-dev libsasl2-dev libssl-dev
+          sudo apt-get install -y build-essential libldap2-dev libsasl2-dev libssl-dev curl jq
 
       - name: Resolve Airflow constraints URL
         run: |
@@ -97,7 +101,7 @@ jobs:
       - name: Prepare Airflow directories and stage plugin archive
         run: |
           set -e
-          mkdir -p "$AIRFLOW_HOME" "$AIRFLOW_DATA_DIR" "$AIRFLOW_PLUGINS_DIR"
+          mkdir -p "$AIRFLOW_HOME" "$AIRFLOW_DATA_DIR" "$AIRFLOW_PLUGINS_DIR" "$AIRFLOW_DAGS_DIR" "$AIRFLOW_CI_ARTIFACTS"
 
           python - <<'PY'
           import os
@@ -147,15 +151,12 @@ jobs:
               Path("permissions.ini"),
               build_root / "config_runtime" / "permissions.ini",
           ]
-          copied = False
           for candidate in permission_candidates:
               if candidate.exists():
                   permissions_dst.parent.mkdir(parents=True, exist_ok=True)
                   shutil.copy2(candidate, permissions_dst)
-                  copied = True
                   break
-
-          if not copied:
+          else:
               raise SystemExit("Could not locate permissions.ini for staging")
 
           zip_path.parent.mkdir(parents=True, exist_ok=True)
@@ -168,28 +169,31 @@ jobs:
           print(f"staged permissions.ini into {permissions_dst}")
           PY
 
-          echo "==> list AIRFLOW_HOME"
-          find "$AIRFLOW_HOME" -maxdepth 3 -print | sort
-
-          echo "==> list AIRFLOW_PLUGINS_DIR"
-          find "$AIRFLOW_PLUGINS_DIR" -maxdepth 4 -print | sort
-
-          echo "==> list AIRFLOW_DATA_DIR"
-          find "$AIRFLOW_DATA_DIR" -maxdepth 3 -print | sort || true
-
-          echo "==> zip content"
-          python - <<'PY'
-          import os
-          import zipfile
-
-          with zipfile.ZipFile(os.environ["AIRFLOW_PLUGIN_ZIP"]) as zf:
-              for name in zf.namelist():
-                  print(name)
-          PY
-
       - name: Export plugin archive into PYTHONPATH
+        run: echo "PYTHONPATH=${AIRFLOW_PLUGIN_ZIP}" >> "$GITHUB_ENV"
+
+      - name: Create hello world DAG fixture
         run: |
-          echo "PYTHONPATH=${AIRFLOW_PLUGIN_ZIP}" >> "$GITHUB_ENV"
+          cat > "$AIRFLOW_DAGS_DIR/hello_world_ci.py" <<'PY'
+          from __future__ import annotations
+          from datetime import datetime
+          from airflow import DAG
+          from airflow.operators.empty import EmptyOperator
+
+          with DAG(
+              dag_id="hello_world_ci",
+              start_date=datetime(2024, 1, 1),
+              schedule=None,
+              catchup=False,
+              tags=["ci", "hello-world"],
+          ) as dag:
+              start = EmptyOperator(task_id="start")
+              hello = EmptyOperator(task_id="hello")
+              done = EmptyOperator(task_id="done")
+              start >> hello >> done
+          PY
+          echo "==> hello_world_ci.py"
+          cat "$AIRFLOW_DAGS_DIR/hello_world_ci.py"
 
       - name: Create and patch airflow.cfg
         run: |
@@ -206,19 +210,19 @@ jobs:
           if cfg_path.exists():
               cfg.read(cfg_path)
 
-          if "core" not in cfg:
-              cfg["core"] = {}
-          if "database" not in cfg:
-              cfg["database"] = {}
-          if "api_auth" not in cfg:
-              cfg["api_auth"] = {}
+          for section in ("core", "database", "api_auth", "api", "logging"):
+              if section not in cfg:
+                  cfg[section] = {}
 
           cfg["core"]["auth_manager"] = "rbac_providers_auth_manager.auth_manager.ItimLdapAuthManager"
           cfg["core"]["itim_ldap_permissions_ini"] = os.environ["AIRFLOW_PERMISSIONS_INI"]
           cfg["core"]["plugins_folder"] = os.environ["AIRFLOW_PLUGINS_DIR"]
+          cfg["core"]["dags_folder"] = os.environ["AIRFLOW_DAGS_DIR"]
           cfg["core"]["lazy_load_plugins"] = "False"
           cfg["core"]["load_examples"] = "False"
           cfg["database"]["sql_alchemy_conn"] = f"sqlite:///{os.environ['AIRFLOW_DB_PATH']}"
+          cfg["api"]["base_url"] = "http://127.0.0.1:8080"
+          cfg["logging"]["logging_level"] = "DEBUG"
 
           cfg["api_auth"]["jwt_secret"] = "ci-only-jwt-secret-not-for-production-change-me-0123456789"
           cfg["api_auth"]["jwt_algorithm"] = "HS512"
@@ -233,34 +237,14 @@ jobs:
           echo "==> airflow.cfg"
           cat "$AIRFLOW_CONFIG"
 
-      - name: Show effective Airflow config values
-        run: |
-          python - <<'PY'
-          import os
-          from airflow.configuration import conf
-
-          print("AIRFLOW_HOME =", os.environ["AIRFLOW_HOME"])
-          print("AIRFLOW_CONFIG =", os.environ["AIRFLOW_CONFIG"])
-          print("AIRFLOW_PLUGINS_DIR =", os.environ["AIRFLOW_PLUGINS_DIR"])
-          print("AIRFLOW_DATA_DIR =", os.environ["AIRFLOW_DATA_DIR"])
-          print("AIRFLOW_DB_PATH =", os.environ["AIRFLOW_DB_PATH"])
-          print("AIRFLOW_PLUGIN_ZIP =", os.environ["AIRFLOW_PLUGIN_ZIP"])
-          print("AIRFLOW_PERMISSIONS_INI =", os.environ["AIRFLOW_PERMISSIONS_INI"])
-          print("PYTHONPATH =", os.environ.get("PYTHONPATH"))
-          print("core.auth_manager =", conf.get("core", "auth_manager"))
-          print("core.itim_ldap_permissions_ini =", conf.get("core", "itim_ldap_permissions_ini"))
-          print("core.plugins_folder =", conf.get("core", "plugins_folder"))
-          print("api_auth.jwt_algorithm =", conf.get("api_auth", "jwt_algorithm"))
-          print("api_auth.jwt_audience =", conf.get("api_auth", "jwt_audience"))
-          print("api_auth.jwt_secret_set =", bool(conf.get("api_auth", "jwt_secret", fallback="")))
-          PY
-
       - name: Airflow info
-        run: python -m airflow info
+        run: |
+          set -o pipefail
+          python -m airflow info 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/airflow-info.log"
 
       - name: Debug Python import path
         run: |
-          python - <<'PY'
+          python - <<'PY' 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/python-path.log"
           import os
           import sys
           print("cwd =", os.getcwd())
@@ -270,85 +254,114 @@ jobs:
 
       - name: Pre-DB auth manager import and ldap smoke
         run: |
-          python - <<'PY'
+          python - <<'PY' 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/auth-manager-import.log"
           import os
           import sys
           import ldap
-
           print("plugin zip =", os.environ["AIRFLOW_PLUGIN_ZIP"])
           print("effective sys.path =", sys.path)
           print("python-ldap version =", getattr(ldap, "__version__", "unknown"))
-
           from rbac_providers_auth_manager.auth_manager import ItimLdapAuthManager
           print("loaded auth manager =", ItimLdapAuthManager.__name__)
           PY
 
-      - name: Pre-DB API server info smoke
-        continue-on-error: true
+      - name: Airflow DB bootstrap smoke with verbose logs
         run: |
-          set +e
-          AIRFLOW__LOGGING__LOGGING_LEVEL=INFO python -m airflow api-server >"$AIRFLOW_HOME/api-pre-db.log" 2>&1 &
-          API_PID=$!
-          echo "pre-db api-server pid=$API_PID"
-          sleep 20
-          echo "==> pre-db api-server log"
-          cat "$AIRFLOW_HOME/api-pre-db.log" || true
-          kill "$API_PID" >/dev/null 2>&1 || true
-          wait "$API_PID" >/dev/null 2>&1 || true
-          exit 0
+          set -o pipefail
+          AIRFLOW__LOGGING__LOGGING_LEVEL=DEBUG python -m airflow db migrate 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/airflow-db-migrate.log"
 
-      - name: Airflow DB bootstrap smoke
+      - name: Discover hello world DAG and task tree
         run: |
-          mkdir -p "$AIRFLOW_HOME"
-          python -m airflow db migrate
+          set -o pipefail
+          python -m airflow dags list 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/airflow-dags-list.log"
+          python -m airflow tasks list hello_world_ci --tree 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/airflow-tasks-tree.log"
 
-      - name: Post-DB API server info smoke
+      - name: Execute hello world DAG test run
+        run: |
+          set -o pipefail
+          python -m airflow dags test hello_world_ci 2026-03-19T00:00:00+00:00 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/airflow-dags-test.log"
+
+      - name: Start API server and capture verbose logs
         run: |
           set -e
-          AIRFLOW__LOGGING__LOGGING_LEVEL=INFO python -m airflow api-server >"$AIRFLOW_HOME/api-post-db.log" 2>&1 &
+          AIRFLOW__LOGGING__LOGGING_LEVEL=DEBUG python -m airflow api-server >"$AIRFLOW_CI_ARTIFACTS/api-server.log" 2>&1 &
           API_PID=$!
-          echo "post-db api-server pid=$API_PID"
+          echo "$API_PID" > "$AIRFLOW_CI_ARTIFACTS/api-server.pid"
+          echo "api-server pid=$API_PID"
 
-          for i in $(seq 1 30); do
-            if curl -fsS "http://127.0.0.1:8080/api/v2/monitor/health" >"$AIRFLOW_HOME/health.json"; then
+          for i in $(seq 1 40); do
+            if curl -fsS "http://127.0.0.1:8080/api/v2/monitor/health" >"$AIRFLOW_CI_ARTIFACTS/health.json"; then
               break
             fi
             sleep 2
           done
 
-          echo "==> post-db api-server log"
-          cat "$AIRFLOW_HOME/api-post-db.log" || true
+          curl -fsS "http://127.0.0.1:8080/api/v2/version" >"$AIRFLOW_CI_ARTIFACTS/version.json"
+
+          echo "==> api-server log tail"
+          tail -n 200 "$AIRFLOW_CI_ARTIFACTS/api-server.log" || true
 
           if ! ps -p "$API_PID" >/dev/null 2>&1; then
             echo "api-server exited unexpectedly"
             exit 1
           fi
 
-          if [ ! -s "$AIRFLOW_HOME/health.json" ]; then
+          if [ ! -s "$AIRFLOW_CI_ARTIFACTS/health.json" ]; then
             echo "health endpoint did not respond"
             exit 1
           fi
-
-          echo "==> health.json"
-          cat "$AIRFLOW_HOME/health.json"
 
           python - <<'PY'
           import json
           import os
           from pathlib import Path
 
-          data = json.loads(Path(os.environ["AIRFLOW_HOME"], "health.json").read_text(encoding="utf-8"))
-          metadb = (data.get("metadatabase") or {}).get("status")
+          artifacts = Path(os.environ["AIRFLOW_CI_ARTIFACTS"])
+          health = json.loads((artifacts / "health.json").read_text(encoding="utf-8"))
+          version = json.loads((artifacts / "version.json").read_text(encoding="utf-8"))
+          metadb = (health.get("metadatabase") or {}).get("status")
           if metadb != "healthy":
               raise SystemExit(f"metadatabase health is not healthy: {metadb!r}")
           print("validated metadatabase health:", metadb)
+          print("api version payload keys:", sorted(version.keys()))
           PY
 
-          grep -q "Initialized ITIM auth manager" "$AIRFLOW_HOME/api-post-db.log"
-          grep -q "Application startup complete" "$AIRFLOW_HOME/api-post-db.log"
+      - name: Run Airflow-aware smoke tests with verbose output
+        run: |
+          set -o pipefail
+          python -m pytest -vv -rA -s --showlocals --durations=20 --log-cli-level=INFO \
+            --maxfail=1 \
+            --disable-warnings \
+            --junitxml="$AIRFLOW_CI_ARTIFACTS/pytest-airflow.xml" \
+            tests/ci/test_airflow_smoke.py 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/pytest-airflow.log"
 
-          kill "$API_PID" >/dev/null 2>&1 || true
-          wait "$API_PID" >/dev/null 2>&1 || true
+      - name: Stop API server and print final logs
+        if: always()
+        run: |
+          if [ -f "$AIRFLOW_CI_ARTIFACTS/api-server.pid" ]; then
+            API_PID="$(cat "$AIRFLOW_CI_ARTIFACTS/api-server.pid")"
+            kill "$API_PID" >/dev/null 2>&1 || true
+            wait "$API_PID" >/dev/null 2>&1 || true
+          fi
+          echo "==> final api-server log tail"
+          tail -n 200 "$AIRFLOW_CI_ARTIFACTS/api-server.log" || true
+          {
+            echo "# Airflow integration summary"
+            echo ""
+            echo "- airflow-info.log"
+            echo "- airflow-db-migrate.log"
+            echo "- airflow-dags-list.log"
+            echo "- airflow-tasks-tree.log"
+            echo "- airflow-dags-test.log"
+            echo "- api-server.log"
+            echo "- health.json"
+            echo "- version.json"
+            echo "- pytest-airflow.log"
+          } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Run Airflow-aware smoke tests
-        run: python -m pytest -q --maxfail=1 --disable-warnings tests/ci -k airflow
+      - name: Upload Airflow integration artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: airflow-integration-py${{ inputs.python-version }}
+          path: ${{ env.AIRFLOW_CI_ARTIFACTS }}

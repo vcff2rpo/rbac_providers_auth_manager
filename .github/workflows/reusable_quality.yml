@@ -17,15 +17,20 @@ env:
   PYTHONPATH: ${{ github.workspace }}/..
   UNIT_TEST_FILES: >-
     tests/ci/test_authorization_policy.py
+    tests/ci/test_browser_token_flow_matrix.py
     tests/ci/test_config_matrix.py
     tests/ci/test_config_runtime.py
     tests/ci/test_entra_backend_simulation.py
     tests/ci/test_entra_browser_flow_integration.py
+    tests/ci/test_identity_mapping_matrix.py
     tests/ci/test_import_smoke.py
     tests/ci/test_ldap_backend_simulation.py
     tests/ci/test_permissions_ini_scenarios.py
     tests/ci/test_runtime_security_and_logging.py
     tests/ci/test_runtime_smoke.py
+  QUALITY_ARTIFACT_DIR: .ci-artifacts/quality
+  PYTEST_VERBOSE_ARGS: >-
+    -vv -rA -s --showlocals --durations=20 --log-cli-level=INFO
 
 jobs:
   compile:
@@ -83,8 +88,18 @@ jobs:
       - name: Install quality and test dependencies
         run: python -m pip install -r requirements-dev.txt
 
-      - name: Collect unit and smoke tests
-        run: python -m pytest --collect-only -q $UNIT_TEST_FILES
+      - name: Collect unit and smoke tests with verbose inventory
+        run: |
+          set -o pipefail
+          mkdir -p "$QUALITY_ARTIFACT_DIR"
+          python -m pytest --collect-only -q $PYTEST_VERBOSE_ARGS $UNIT_TEST_FILES 2>&1 | tee "$QUALITY_ARTIFACT_DIR/pytest-collect.log"
+
+      - name: Upload collect logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-pytest-collect
+          path: ${{ env.QUALITY_ARTIFACT_DIR }}/pytest-collect.log
 
   ruff_lint:
     name: ruff lint (Python 3.13)
@@ -205,7 +220,7 @@ jobs:
   pytest:
     name: pytest + coverage (Python 3.13)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     steps:
       - name: Checkout
@@ -228,16 +243,28 @@ jobs:
       - name: Install quality and test dependencies
         run: python -m pip install -r requirements-dev.txt
 
-      - name: Run explicit unit and smoke test inventory
+      - name: Run explicit unit and smoke inventory with detailed logs
         run: |
-          python -m pytest -q --maxfail=1 --disable-warnings             --cov="$PACKAGE_NAME"             --cov-report=term-missing             --cov-report=xml:coverage.xml             $UNIT_TEST_FILES
+          set -o pipefail
+          mkdir -p "$QUALITY_ARTIFACT_DIR"
+          python -m pytest $PYTEST_VERBOSE_ARGS \
+            --maxfail=1 \
+            --disable-warnings \
+            --junitxml="$QUALITY_ARTIFACT_DIR/pytest-quality.xml" \
+            --cov="$PACKAGE_NAME" \
+            --cov-report=term-missing \
+            --cov-report=xml:$QUALITY_ARTIFACT_DIR/coverage.xml \
+            $UNIT_TEST_FILES 2>&1 | tee "$QUALITY_ARTIFACT_DIR/pytest-quality.log"
 
-      - name: Upload coverage report
-        if: ${{ always() && hashFiles('coverage.xml') != '' }}
+      - name: Upload quality logs and reports
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-xml
-          path: coverage.xml
+          name: quality-pytest-report
+          path: |
+            ${{ env.QUALITY_ARTIFACT_DIR }}/pytest-quality.log
+            ${{ env.QUALITY_ARTIFACT_DIR }}/pytest-quality.xml
+            ${{ env.QUALITY_ARTIFACT_DIR }}/coverage.xml
 
   pip_audit:
     name: pip audit (Python 3.13)
@@ -293,6 +320,20 @@ jobs:
           echo "mypy_tests=${{ needs.mypy_tests.result }}"
           echo "pytest=${{ needs.pytest.result }}"
           echo "pip_audit=${{ needs.pip_audit.result }}"
+          {
+            echo "# Quality suite summary"
+            echo ""
+            echo "- compile: ${{ needs.compile.result }}"
+            echo "- pytest_collect: ${{ needs.pytest_collect.result }}"
+            echo "- ruff_lint: ${{ needs.ruff_lint.result }}"
+            echo "- ruff_format: ${{ needs.ruff_format.result }}"
+            echo "- mypy_package: ${{ needs.mypy_package.result }}"
+            echo "- mypy_tests: ${{ needs.mypy_tests.result }}"
+            echo "- pytest: ${{ needs.pytest.result }}"
+            echo "- pip_audit: ${{ needs.pip_audit.result }}"
+            echo ""
+            echo "Expected rich artifacts: quality-pytest-collect, quality-pytest-report"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Fail if any job failed
         run: |

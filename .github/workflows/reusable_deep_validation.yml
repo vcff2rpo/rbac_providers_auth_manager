@@ -25,15 +25,20 @@ permissions:
 env:
   NON_SERVICE_TESTS: >-
     tests/ci/test_authorization_policy.py
+    tests/ci/test_browser_token_flow_matrix.py
     tests/ci/test_config_matrix.py
     tests/ci/test_config_runtime.py
     tests/ci/test_entra_backend_simulation.py
     tests/ci/test_entra_browser_flow_integration.py
+    tests/ci/test_identity_mapping_matrix.py
     tests/ci/test_import_smoke.py
     tests/ci/test_ldap_backend_simulation.py
     tests/ci/test_permissions_ini_scenarios.py
     tests/ci/test_runtime_security_and_logging.py
     tests/ci/test_runtime_smoke.py
+  DEEP_ARTIFACT_DIR: .ci-artifacts/deep-validation
+  PYTEST_VERBOSE_ARGS: >-
+    -vv -rA -s --showlocals --durations=20 --log-cli-level=INFO
 
 jobs:
   test-catalog:
@@ -53,16 +58,15 @@ jobs:
           from pathlib import Path
           import sys
 
-          discovered = {
-              path.as_posix()
-              for path in Path('tests/ci').glob('test_*.py')
-          }
+          discovered = {path.as_posix() for path in Path('tests/ci').glob('test_*.py')}
           deep_validation = {
               'tests/ci/test_authorization_policy.py',
+              'tests/ci/test_browser_token_flow_matrix.py',
               'tests/ci/test_config_matrix.py',
               'tests/ci/test_config_runtime.py',
               'tests/ci/test_entra_backend_simulation.py',
               'tests/ci/test_entra_browser_flow_integration.py',
+              'tests/ci/test_identity_mapping_matrix.py',
               'tests/ci/test_import_smoke.py',
               'tests/ci/test_ldap_backend_simulation.py',
               'tests/ci/test_permissions_ini_scenarios.py',
@@ -87,7 +91,7 @@ jobs:
           }
           names = list(suites)
           for idx, left in enumerate(names):
-              for right in names[idx + 1 :]:
+              for right in names[idx + 1:]:
                   both = sorted(suites[left] & suites[right])
                   if both:
                       overlaps.append((left, right, both))
@@ -139,7 +143,20 @@ jobs:
         run: python -m compileall -q .
 
       - name: Import smoke test
-        run: python -m pytest -q tests/ci/test_import_smoke.py
+        run: |
+          set -o pipefail
+          mkdir -p "$DEEP_ARTIFACT_DIR"
+          python -m pytest $PYTEST_VERBOSE_ARGS tests/ci/test_import_smoke.py \
+            --junitxml="$DEEP_ARTIFACT_DIR/import-smoke.xml" 2>&1 | tee "$DEEP_ARTIFACT_DIR/import-smoke.log"
+
+      - name: Upload import smoke logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deep-validation-import-smoke
+          path: |
+            ${{ env.DEEP_ARTIFACT_DIR }}/import-smoke.log
+            ${{ env.DEEP_ARTIFACT_DIR }}/import-smoke.xml
 
   unit-and-mock-tests:
     name: unit + mock tests (${{ matrix.group-name }}, Python ${{ matrix.python-version }})
@@ -154,12 +171,14 @@ jobs:
             test-files: >-
               tests/ci/test_config_matrix.py
               tests/ci/test_config_runtime.py
+              tests/ci/test_identity_mapping_matrix.py
               tests/ci/test_permissions_ini_scenarios.py
               tests/ci/test_runtime_security_and_logging.py
               tests/ci/test_runtime_smoke.py
-          - group-name: authorization-imports
+          - group-name: authorization-routes
             test-files: >-
               tests/ci/test_authorization_policy.py
+              tests/ci/test_browser_token_flow_matrix.py
               tests/ci/test_import_smoke.py
           - group-name: provider-simulations
             test-files: >-
@@ -191,16 +210,29 @@ jobs:
       - name: Install validation dependencies
         run: python -m pip install -r requirements-dev.txt
 
-      - name: Run sharded unit, matrix, and mock tests with coverage
+      - name: Run sharded unit, matrix, and mock tests with coverage and verbose output
         run: |
-          python -m pytest -q --maxfail=1 --disable-warnings             --cov="$PACKAGE_NAME"             --cov-report=term-missing             --cov-report=xml:coverage-${{ matrix.group-name }}-${{ matrix.python-version }}.xml             --cov-fail-under=${{ inputs['coverage-min'] }}             ${{ matrix.test-files }}
+          set -o pipefail
+          mkdir -p "$DEEP_ARTIFACT_DIR"
+          python -m pytest $PYTEST_VERBOSE_ARGS \
+            --maxfail=1 \
+            --disable-warnings \
+            --junitxml="$DEEP_ARTIFACT_DIR/pytest-${{ matrix.group-name }}-${{ matrix.python-version }}.xml" \
+            --cov="$PACKAGE_NAME" \
+            --cov-report=term-missing \
+            --cov-report=xml:$DEEP_ARTIFACT_DIR/coverage-${{ matrix.group-name }}-${{ matrix.python-version }}.xml \
+            --cov-fail-under=${{ inputs['coverage-min'] }} \
+            ${{ matrix.test-files }} 2>&1 | tee "$DEEP_ARTIFACT_DIR/pytest-${{ matrix.group-name }}-${{ matrix.python-version }}.log"
 
-      - name: Upload coverage report
-        if: ${{ always() && hashFiles(format('coverage-{0}-{1}.xml', matrix.group-name, matrix.python-version)) != '' }}
+      - name: Upload matrix logs and reports
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-xml-${{ matrix.group-name }}-py${{ matrix.python-version }}
-          path: coverage-${{ matrix.group-name }}-${{ matrix.python-version }}.xml
+          name: deep-validation-${{ matrix.group-name }}-py${{ matrix.python-version }}
+          path: |
+            ${{ env.DEEP_ARTIFACT_DIR }}/pytest-${{ matrix.group-name }}-${{ matrix.python-version }}.log
+            ${{ env.DEEP_ARTIFACT_DIR }}/pytest-${{ matrix.group-name }}-${{ matrix.python-version }}.xml
+            ${{ env.DEEP_ARTIFACT_DIR }}/coverage-${{ matrix.group-name }}-${{ matrix.python-version }}.xml
 
   dead-code:
     name: dead code scan (Python 3.13)
@@ -252,6 +284,16 @@ jobs:
           echo "compile-and-import-smoke=${{ needs.compile-and-import-smoke.result }}"
           echo "unit-and-mock-tests=${{ needs.unit-and-mock-tests.result }}"
           echo "dead-code=${{ needs.dead-code.result }}"
+          {
+            echo "# Deep validation summary"
+            echo ""
+            echo "- test-catalog: ${{ needs.test-catalog.result }}"
+            echo "- compile-and-import-smoke: ${{ needs.compile-and-import-smoke.result }}"
+            echo "- unit-and-mock-tests: ${{ needs.unit-and-mock-tests.result }}"
+            echo "- dead-code: ${{ needs.dead-code.result }}"
+            echo ""
+            echo "Expected rich artifacts: deep-validation-import-smoke and per-matrix deep-validation-* uploads"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Fail if any deep validation job failed
         run: |
