@@ -270,11 +270,12 @@ jobs:
           set -o pipefail
           AIRFLOW__LOGGING__LOGGING_LEVEL=DEBUG python -m airflow db migrate 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/airflow-db-migrate.log"
 
-      - name: Discover hello world DAG and task tree
+      - name: Discover hello world DAG and task relationships
         run: |
           set -o pipefail
           python -m airflow dags list 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/airflow-dags-list.log"
-          python -m airflow tasks list hello_world_ci --tree 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/airflow-tasks-tree.log"
+          python -m airflow tasks list hello_world_ci 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/airflow-tasks-list.log"
+          python -m airflow dags show hello_world_ci 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/airflow-dag-show.log"
 
       - name: Execute hello world DAG test run
         run: |
@@ -351,7 +352,8 @@ jobs:
             echo "- airflow-info.log"
             echo "- airflow-db-migrate.log"
             echo "- airflow-dags-list.log"
-            echo "- airflow-tasks-tree.log"
+            echo "- airflow-tasks-list.log"
+            echo "- airflow-dag-show.log"
             echo "- airflow-dags-test.log"
             echo "- api-server.log"
             echo "- health.json"
