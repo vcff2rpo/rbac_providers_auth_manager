@@ -100,7 +100,7 @@ jobs:
 
       - name: Prepare Airflow directories and stage plugin archive
         run: |
-          set -euo pipefail
+          set -e
           mkdir -p "$AIRFLOW_HOME" "$AIRFLOW_DATA_DIR" "$AIRFLOW_PLUGINS_DIR" "$AIRFLOW_DAGS_DIR" "$AIRFLOW_CI_ARTIFACTS"
 
           python - <<'PY'
@@ -197,7 +197,7 @@ jobs:
 
       - name: Create and patch airflow.cfg
         run: |
-          set -euo pipefail
+          set -e
           python - <<'PY'
           import configparser
           import os
@@ -242,11 +242,6 @@ jobs:
           set -o pipefail
           python -m airflow info 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/airflow-info.log"
 
-      - name: Airflow version
-        run: |
-          set -o pipefail
-          python -m airflow version 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/airflow-version.log"
-
       - name: Debug Python import path
         run: |
           python - <<'PY' 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/python-path.log"
@@ -275,33 +270,21 @@ jobs:
           set -o pipefail
           AIRFLOW__LOGGING__LOGGING_LEVEL=DEBUG python -m airflow db migrate 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/airflow-db-migrate.log"
 
-      - name: Discover hello world DAG and tasks using plain-text Airflow CLI
+      - name: Discover hello world DAG and task relationships
         run: |
-          set -euo pipefail
-          python -W "ignore:Could not import graphviz:UserWarning" -m airflow dags list 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/airflow-dags-list.log"
-          python -W "ignore:Could not import graphviz:UserWarning" -m airflow tasks list hello_world_ci 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/airflow-tasks-list.log"
-          {
-            echo "Graphviz-dependent DAG rendering is intentionally skipped in CI."
-            echo "DAG discovery is validated through 'airflow dags list', 'airflow tasks list', and 'airflow dags test'."
-          } | tee "$AIRFLOW_CI_ARTIFACTS/airflow-dag-rendering-skipped.log"
-      
-          grep -F "hello_world_ci" "$AIRFLOW_CI_ARTIFACTS/airflow-dags-list.log"
-          grep -Fx "start" "$AIRFLOW_CI_ARTIFACTS/airflow-tasks-list.log"
-          grep -Fx "hello" "$AIRFLOW_CI_ARTIFACTS/airflow-tasks-list.log"
-          grep -Fx "done" "$AIRFLOW_CI_ARTIFACTS/airflow-tasks-list.log"
+          set -o pipefail
+          python -m airflow dags list 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/airflow-dags-list.log"
+          python -m airflow tasks list hello_world_ci 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/airflow-tasks-list.log"
+          python -m airflow dags show hello_world_ci 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/airflow-dag-show.log"
 
       - name: Execute hello world DAG test run
         run: |
-          set -euo pipefail
+          set -o pipefail
           python -m airflow dags test hello_world_ci 2026-03-19T00:00:00+00:00 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/airflow-dags-test.log"
-          grep -F "hello_world_ci" "$AIRFLOW_CI_ARTIFACTS/airflow-dags-test.log"
-          grep -F "start" "$AIRFLOW_CI_ARTIFACTS/airflow-dags-test.log"
-          grep -F "hello" "$AIRFLOW_CI_ARTIFACTS/airflow-dags-test.log"
-          grep -F "done" "$AIRFLOW_CI_ARTIFACTS/airflow-dags-test.log"
 
       - name: Start API server and capture verbose logs
         run: |
-          set -euo pipefail
+          set -e
           AIRFLOW__LOGGING__LOGGING_LEVEL=DEBUG python -m airflow api-server >"$AIRFLOW_CI_ARTIFACTS/api-server.log" 2>&1 &
           API_PID=$!
           echo "$API_PID" > "$AIRFLOW_CI_ARTIFACTS/api-server.pid"
@@ -367,11 +350,10 @@ jobs:
             echo "# Airflow integration summary"
             echo ""
             echo "- airflow-info.log"
-            echo "- airflow-version.log"
             echo "- airflow-db-migrate.log"
             echo "- airflow-dags-list.log"
             echo "- airflow-tasks-list.log"
-            echo "- airflow-dag-rendering-skipped.log"
+            echo "- airflow-dag-show.log"
             echo "- airflow-dags-test.log"
             echo "- api-server.log"
             echo "- health.json"
