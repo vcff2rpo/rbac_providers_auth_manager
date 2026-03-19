@@ -22,7 +22,90 @@ on:
 permissions:
   contents: read
 
+env:
+  NON_SERVICE_TESTS: >-
+    tests/ci/test_authorization_policy.py
+    tests/ci/test_config_matrix.py
+    tests/ci/test_config_runtime.py
+    tests/ci/test_entra_backend_simulation.py
+    tests/ci/test_entra_browser_flow_integration.py
+    tests/ci/test_import_smoke.py
+    tests/ci/test_ldap_backend_simulation.py
+    tests/ci/test_permissions_ini_scenarios.py
+    tests/ci/test_runtime_security_and_logging.py
+    tests/ci/test_runtime_smoke.py
+
 jobs:
+  test-catalog:
+    name: test catalog coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Verify every CI test is assigned to exactly one workflow suite
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import sys
+
+          discovered = {
+              path.as_posix()
+              for path in Path('tests/ci').glob('test_*.py')
+          }
+          deep_validation = {
+              'tests/ci/test_authorization_policy.py',
+              'tests/ci/test_config_matrix.py',
+              'tests/ci/test_config_runtime.py',
+              'tests/ci/test_entra_backend_simulation.py',
+              'tests/ci/test_entra_browser_flow_integration.py',
+              'tests/ci/test_import_smoke.py',
+              'tests/ci/test_ldap_backend_simulation.py',
+              'tests/ci/test_permissions_ini_scenarios.py',
+              'tests/ci/test_runtime_security_and_logging.py',
+              'tests/ci/test_runtime_smoke.py',
+          }
+          airflow_suite = {
+              'tests/ci/test_airflow_smoke.py',
+          }
+          idp_suite = {
+              'tests/ci/test_ldap_live_container_integration.py',
+          }
+
+          assigned = deep_validation | airflow_suite | idp_suite
+          missing = sorted(discovered - assigned)
+          extra = sorted(assigned - discovered)
+          overlaps = []
+          suites = {
+              'deep_validation': deep_validation,
+              'airflow_suite': airflow_suite,
+              'identity_provider_integration': idp_suite,
+          }
+          names = list(suites)
+          for idx, left in enumerate(names):
+              for right in names[idx + 1 :]:
+                  both = sorted(suites[left] & suites[right])
+                  if both:
+                      overlaps.append((left, right, both))
+
+          if missing or extra or overlaps:
+              print('discovered=', sorted(discovered))
+              print('assigned=', sorted(assigned))
+              if missing:
+                  print('missing=', missing)
+              if extra:
+                  print('extra=', extra)
+              if overlaps:
+                  print('overlaps=', overlaps)
+              sys.exit(1)
+
+          print('All tests/ci files are assigned to exactly one CI suite.')
+          PY
+
   compile-and-import-smoke:
     name: compile + import smoke (Python 3.13)
     runs-on: ubuntu-latest
@@ -59,13 +142,30 @@ jobs:
         run: python -m pytest -q tests/ci/test_import_smoke.py
 
   unit-and-mock-tests:
-    name: unit + mock tests (Python ${{ matrix.python-version }})
+    name: unit + mock tests (${{ matrix.group-name }}, Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
     timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
         python-version: ${{ fromJson(inputs['python-versions']) }}
+        include:
+          - group-name: config-runtime
+            test-files: >-
+              tests/ci/test_config_matrix.py
+              tests/ci/test_config_runtime.py
+              tests/ci/test_permissions_ini_scenarios.py
+              tests/ci/test_runtime_security_and_logging.py
+              tests/ci/test_runtime_smoke.py
+          - group-name: authorization-imports
+            test-files: >-
+              tests/ci/test_authorization_policy.py
+              tests/ci/test_import_smoke.py
+          - group-name: provider-simulations
+            test-files: >-
+              tests/ci/test_ldap_backend_simulation.py
+              tests/ci/test_entra_backend_simulation.py
+              tests/ci/test_entra_browser_flow_integration.py
     env:
       PACKAGE_NAME: ${{ inputs['package-name'] }}
       PYTHONPATH: ${{ github.workspace }}/..
@@ -91,21 +191,16 @@ jobs:
       - name: Install validation dependencies
         run: python -m pip install -r requirements-dev.txt
 
-      - name: Run unit, matrix, and mock tests with coverage
+      - name: Run sharded unit, matrix, and mock tests with coverage
         run: |
-          python -m pytest -q --maxfail=1 --disable-warnings \
-            --cov="$PACKAGE_NAME" \
-            --cov-report=term-missing \
-            --cov-report=xml:coverage-${{ matrix.python-version }}.xml \
-            --cov-fail-under=${{ inputs['coverage-min'] }} \
-            tests/ci
+          python -m pytest -q --maxfail=1 --disable-warnings             --cov="$PACKAGE_NAME"             --cov-report=term-missing             --cov-report=xml:coverage-${{ matrix.group-name }}-${{ matrix.python-version }}.xml             --cov-fail-under=${{ inputs['coverage-min'] }}             ${{ matrix.test-files }}
 
       - name: Upload coverage report
-        if: ${{ always() && hashFiles(format('coverage-{0}.xml', matrix.python-version)) != '' }}
+        if: ${{ always() && hashFiles(format('coverage-{0}-{1}.xml', matrix.group-name, matrix.python-version)) != '' }}
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-xml-py${{ matrix.python-version }}
-          path: coverage-${{ matrix.python-version }}.xml
+          name: coverage-xml-${{ matrix.group-name }}-py${{ matrix.python-version }}
+          path: coverage-${{ matrix.group-name }}-${{ matrix.python-version }}.xml
 
   dead-code:
     name: dead code scan (Python 3.13)
@@ -145,6 +240,7 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ always() }}
     needs:
+      - test-catalog
       - compile-and-import-smoke
       - unit-and-mock-tests
       - dead-code
@@ -152,6 +248,7 @@ jobs:
     steps:
       - name: Print job results
         run: |
+          echo "test-catalog=${{ needs.test-catalog.result }}"
           echo "compile-and-import-smoke=${{ needs.compile-and-import-smoke.result }}"
           echo "unit-and-mock-tests=${{ needs.unit-and-mock-tests.result }}"
           echo "dead-code=${{ needs.dead-code.result }}"
@@ -159,6 +256,7 @@ jobs:
       - name: Fail if any deep validation job failed
         run: |
           results=(
+            "${{ needs.test-catalog.result }}"
             "${{ needs.compile-and-import-smoke.result }}"
             "${{ needs.unit-and-mock-tests.result }}"
             "${{ needs.dead-code.result }}"
