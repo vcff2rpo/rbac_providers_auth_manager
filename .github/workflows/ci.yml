@@ -1,0 +1,91 @@
+name: v86 manual CI gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_deep_validation:
+        description: Run deep validation unit, mock, coverage, and dead-code jobs
+        required: true
+        default: true
+        type: boolean
+      run_airflow:
+        description: Run Airflow installation and integration smoke tests
+        required: true
+        default: true
+        type: boolean
+      run_idp_integration:
+        description: Run LDAP and Entra integration-style tests
+        required: true
+        default: true
+        type: boolean
+      create_review_pr:
+        description: Create a new review branch and PR to main only after all enabled gates succeed
+        required: true
+        default: true
+        type: boolean
+
+concurrency:
+  group: v86-manual-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    uses: ./.github/workflows/reusable_quality.yml
+    with:
+      package-name: rbac_providers_auth_manager
+
+  deep_validation:
+    if: ${{ inputs.run_deep_validation }}
+    uses: ./.github/workflows/reusable_deep_validation.yml
+    with:
+      package-name: rbac_providers_auth_manager
+      python-versions: '["3.12", "3.13"]'
+      coverage-min: 25
+
+  airflow_suite:
+    if: ${{ inputs.run_airflow }}
+    uses: ./.github/workflows/reusable_airflow_suite.yml
+    with:
+      package-name: rbac_providers_auth_manager
+      airflow-version: "3.1.8"
+      py312-version: "3.12"
+      py313-version: "3.13"
+
+  identity_provider_integration:
+    if: ${{ inputs.run_idp_integration }}
+    uses: ./.github/workflows/reusable_identity_provider_integration.yml
+    with:
+      package-name: rbac_providers_auth_manager
+      python-version: "3.13"
+
+  review_pr_gate:
+    if: ${{ always() && github.ref_name == 'v86' }}
+    needs:
+      - quality
+      - deep_validation
+      - airflow_suite
+      - identity_provider_integration
+    permissions:
+      contents: write
+      pull-requests: write
+    secrets: inherit
+    uses: ./.github/workflows/reusable_review_pr_gate.yml
+    with:
+      create-review-pr: ${{ inputs.create_review_pr }}
+      source-branch: ${{ github.ref_name }}
+      base-branch: main
+      review-branch-prefix: ready/v86
+      pr-title: "Review: v86 ready for main"
+      quality-result: ${{ needs.quality.result }}
+      deep-validation-enabled: ${{ inputs.run_deep_validation }}
+      deep-validation-result: ${{ inputs.run_deep_validation && needs.deep_validation.result || 'skipped' }}
+      airflow-enabled: ${{ inputs.run_airflow }}
+      airflow-result: ${{ inputs.run_airflow && needs.airflow_suite.outputs.result_summary || 'skipped' }}
+      airflow-suite-result: ${{ inputs.run_airflow && needs.airflow_suite.result || 'skipped' }}
+      idp-enabled: ${{ inputs.run_idp_integration }}
+      idp-result: ${{ inputs.run_idp_integration && needs.identity_provider_integration.result || 'skipped' }}
+      run-url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      source-sha: ${{ github.sha }}

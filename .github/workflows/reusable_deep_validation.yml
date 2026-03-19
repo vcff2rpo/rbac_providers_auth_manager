@@ -1,0 +1,174 @@
+name: reusable deep validation
+
+on:
+  workflow_call:
+    inputs:
+      package-name:
+        description: Python package name
+        required: false
+        type: string
+        default: rbac_providers_auth_manager
+      python-versions:
+        description: JSON array of Python versions for the unit/mock test matrix
+        required: false
+        type: string
+        default: '["3.12", "3.13"]'
+      coverage-min:
+        description: Minimum acceptable line coverage percent for unit/mock tests
+        required: false
+        type: number
+        default: 25
+
+permissions:
+  contents: read
+
+jobs:
+  compile-and-import-smoke:
+    name: compile + import smoke (Python 3.13)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PACKAGE_NAME: ${{ inputs['package-name'] }}
+      PYTHONPATH: ${{ github.workspace }}/..
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            requirements-dev.txt
+            tests/ci/*.py
+
+      - name: Upgrade packaging tools
+        run: python -m pip install --upgrade pip setuptools wheel
+
+      - name: Install validation dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Compile all Python sources
+        run: python -m compileall -q .
+
+      - name: Import smoke test
+        run: python -m pytest -q tests/ci/test_import_smoke.py
+
+  unit-and-mock-tests:
+    name: unit + mock tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ${{ fromJson(inputs['python-versions']) }}
+    env:
+      PACKAGE_NAME: ${{ inputs['package-name'] }}
+      PYTHONPATH: ${{ github.workspace }}/..
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: |
+            requirements-dev.txt
+            tests/ci/*.py
+
+      - name: Upgrade packaging tools
+        run: python -m pip install --upgrade pip setuptools wheel
+
+      - name: Install validation dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Run unit, matrix, and mock tests with coverage
+        run: |
+          python -m pytest -q --maxfail=1 --disable-warnings \
+            --cov="$PACKAGE_NAME" \
+            --cov-report=term-missing \
+            --cov-report=xml:coverage-${{ matrix.python-version }}.xml \
+            --cov-fail-under=${{ inputs['coverage-min'] }} \
+            tests/ci
+
+      - name: Upload coverage report
+        if: ${{ always() && hashFiles(format('coverage-{0}.xml', matrix.python-version)) != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml-py${{ matrix.python-version }}
+          path: coverage-${{ matrix.python-version }}.xml
+
+  dead-code:
+    name: dead code scan (Python 3.13)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PYTHONPATH: ${{ github.workspace }}/..
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            requirements-dev.txt
+            tests/ci/*.py
+
+      - name: Upgrade packaging tools
+        run: python -m pip install --upgrade pip setuptools wheel
+
+      - name: Install validation dependencies
+        run: |
+          python -m pip install -r requirements-dev.txt
+          python -m pip install vulture==2.14
+
+      - name: Run Vulture
+        run: python -m vulture . tests --min-confidence 80
+
+  summary:
+    name: deep validation summary
+    runs-on: ubuntu-latest
+    if: ${{ always() }}
+    needs:
+      - compile-and-import-smoke
+      - unit-and-mock-tests
+      - dead-code
+
+    steps:
+      - name: Print job results
+        run: |
+          echo "compile-and-import-smoke=${{ needs.compile-and-import-smoke.result }}"
+          echo "unit-and-mock-tests=${{ needs.unit-and-mock-tests.result }}"
+          echo "dead-code=${{ needs.dead-code.result }}"
+
+      - name: Fail if any deep validation job failed
+        run: |
+          results=(
+            "${{ needs.compile-and-import-smoke.result }}"
+            "${{ needs.unit-and-mock-tests.result }}"
+            "${{ needs.dead-code.result }}"
+          )
+
+          for result in "${results[@]}"; do
+            if [ "$result" != "success" ]; then
+              echo "At least one deep validation job failed."
+              exit 1
+            fi
+          done
+
+          echo "All deep validation jobs passed."

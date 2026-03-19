@@ -1,0 +1,278 @@
+name: reusable quality
+
+on:
+  workflow_call:
+    inputs:
+      package-name:
+        description: Python package name
+        required: false
+        type: string
+        default: rbac_providers_auth_manager
+
+permissions:
+  contents: read
+
+env:
+  PACKAGE_NAME: ${{ inputs['package-name'] }}
+  PYTHONPATH: ${{ github.workspace }}/..
+
+jobs:
+  compile:
+    name: compile (Python 3.13)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            requirements-dev.txt
+            tests/ci/*.py
+
+      - name: Upgrade packaging tools
+        run: python -m pip install --upgrade pip setuptools wheel
+
+      - name: Install quality and test dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Compile all Python sources
+        run: python -m compileall -q .
+
+  ruff_lint:
+    name: ruff lint (Python 3.13)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            requirements-dev.txt
+            tests/ci/*.py
+
+      - name: Upgrade packaging tools
+        run: python -m pip install --upgrade pip setuptools wheel
+
+      - name: Install quality and test dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Ruff lint
+        run: python -m ruff check .
+
+  ruff_format:
+    name: ruff format check (Python 3.13)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            requirements-dev.txt
+            tests/ci/*.py
+
+      - name: Upgrade packaging tools
+        run: python -m pip install --upgrade pip setuptools wheel
+
+      - name: Install quality and test dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Ruff format check
+        run: python -m ruff format --check .
+
+  mypy_package:
+    name: mypy package (Python 3.13)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            requirements-dev.txt
+            tests/ci/*.py
+
+      - name: Upgrade packaging tools
+        run: python -m pip install --upgrade pip setuptools wheel
+
+      - name: Install quality and test dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Mypy package
+        run: python -m mypy -p "$PACKAGE_NAME"
+
+  mypy_tests:
+    name: mypy tests (Python 3.13)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            requirements-dev.txt
+            tests/ci/*.py
+
+      - name: Upgrade packaging tools
+        run: python -m pip install --upgrade pip setuptools wheel
+
+      - name: Install quality and test dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Mypy tests
+        run: python -m mypy tests/ci
+
+  pytest:
+    name: pytest + coverage (Python 3.13)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            requirements-dev.txt
+            tests/ci/*.py
+
+      - name: Upgrade packaging tools
+        run: python -m pip install --upgrade pip setuptools wheel
+
+      - name: Install quality and test dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Run unit and smoke tests
+        run: |
+          python -m pytest -q --maxfail=1 --disable-warnings \
+            --cov="$PACKAGE_NAME" \
+            --cov-report=term-missing \
+            --cov-report=xml:coverage.xml \
+            tests/ci
+
+      - name: Upload coverage report
+        if: ${{ always() && hashFiles('coverage.xml') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml
+
+  pip_audit:
+    name: pip audit (Python 3.13)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: |
+            requirements-dev.txt
+            tests/ci/*.py
+
+      - name: Upgrade packaging tools
+        run: python -m pip install --upgrade pip setuptools wheel
+
+      - name: Install quality and test dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Pip audit
+        run: python -m pip_audit
+
+  summary:
+    name: quality summary
+    runs-on: ubuntu-latest
+    if: ${{ always() }}
+    needs:
+      - compile
+      - ruff_lint
+      - ruff_format
+      - mypy_package
+      - mypy_tests
+      - pytest
+      - pip_audit
+
+    steps:
+      - name: Print job results
+        run: |
+          echo "compile=${{ needs.compile.result }}"
+          echo "ruff_lint=${{ needs.ruff_lint.result }}"
+          echo "ruff_format=${{ needs.ruff_format.result }}"
+          echo "mypy_package=${{ needs.mypy_package.result }}"
+          echo "mypy_tests=${{ needs.mypy_tests.result }}"
+          echo "pytest=${{ needs.pytest.result }}"
+          echo "pip_audit=${{ needs.pip_audit.result }}"
+
+      - name: Fail if any job failed
+        run: |
+          results=(
+            "${{ needs.compile.result }}"
+            "${{ needs.ruff_lint.result }}"
+            "${{ needs.ruff_format.result }}"
+            "${{ needs.mypy_package.result }}"
+            "${{ needs.mypy_tests.result }}"
+            "${{ needs.pytest.result }}"
+            "${{ needs.pip_audit.result }}"
+          )
+
+          for result in "${results[@]}"; do
+            if [ "$result" != "success" ]; then
+              echo "At least one quality job failed."
+              exit 1
+            fi
+          done
+
+          echo "All quality jobs passed."

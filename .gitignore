@@ -1,0 +1,138 @@
+# Virtual environments
+.venv-win/
+.venv-wsl/
+.venv/
+venv/
+env/
+
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Tool caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.hypothesis/
+.dmypy.json
+
+# Coverage / test reports
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+junit.xml
+pytest.xml
+
+# Build / packaging
+build/
+dist/
+site/
+.eggs/
+*.egg-info/
+pip-wheel-metadata/
+wheels/
+
+# Artifacts / generated outputs
+artifacts/
+reports/
+tmp/
+temp/
+*.tmp
+*.cache
+*.bak
+*.swp
+
+# Logs
+*.log
+logs/
+scripts/*.log
+scripts/*.tmp
+scripts/*.cache
+
+# Local databases / dumps
+*.sqlite
+*.sqlite3
+*.db
+*.dump
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+!.env.sample
+*.env
+*.secret
+*.secrets
+secrets/
+secret/
+tokens/
+token/
+credentials/
+creds/
+
+# Keys / certificates / keystores
+*.pem
+*.key
+*.crt
+*.cer
+*.p12
+*.pfx
+*.jks
+*.kdb
+*.kdbx
+*.asc
+*.gpg
+
+# SSH / auth material
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
+known_hosts
+*.ovpn
+
+# Cloud / kube / local auth files
+.aws/
+.azure/
+.gcloud/
+kubeconfig
+.kube/
+.terraform/
+*.tfstate
+*.tfstate.*
+
+# IDE / editor
+.vscode/
+.idea/
+*.code-workspace
+
+# OS noise
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Type checker / notebook / misc
+.ipynb_checkpoints/
+
+# Local-only config overrides
+*.local
+local_*.py
+config.local.*
+settings.local.*
+override.*
+
+# Project-specific local runtime/config files
+config_runtime/*.local
+config_runtime/*.override
+config_runtime/*.secrets
+config_runtime/*.token
+config_runtime/*.pem
+config_runtime/*.key
+
+# Local debug outputs
+tests/output/
+tests/tmp/

@@ -1,0 +1,8 @@
+ruff==0.13.0
+mypy==1.17.1
+pytest==8.4.2
+pytest-cov==6.2.1
+coverage==7.10.6
+pip-audit==2.9.0
+redis==6.4.0
+fastapi==0.135.1

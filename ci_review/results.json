@@ -1,0 +1,14 @@
+{
+  "source_branch": "v86",
+  "requested_base_branch": "v86",
+  "effective_base_branch": "v86",
+  "default_base_branch": "v86",
+  "base_resolution": "requested",
+  "source_sha": "54751f1826941184d642c0146166619080023687",
+  "run_url": "https://github.com/vcff2rpo/rbac_providers_auth_manager/actions/runs/23275234080",
+  "results": {
+    "quality": "success",
+    "airflow_integration": "py312=success, py313=success"
+  },
+  "review_reason": "all required CI jobs completed successfully"
+}

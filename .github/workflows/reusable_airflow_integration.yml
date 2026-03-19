@@ -1,0 +1,349 @@
+name: reusable airflow integration
+
+on:
+  workflow_call:
+    inputs:
+      package-name:
+        description: Python package name
+        required: false
+        type: string
+        default: rbac_providers_auth_manager
+      airflow-version:
+        description: Airflow version to install
+        required: false
+        type: string
+        default: "3.1.8"
+      python-version:
+        description: Python version for integration test
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  airflow-integration:
+    name: airflow integration (Python ${{ inputs.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      PACKAGE_NAME: ${{ inputs.package-name }}
+      AIRFLOW_VERSION: ${{ inputs.airflow-version }}
+      PYTHONPATH: ""
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ inputs.python-version }}
+          cache: pip
+          cache-dependency-path: |
+            requirements-dev.txt
+            tests/ci/*.py
+
+      - name: Initialize Airflow runtime paths
+        run: |
+          echo "AIRFLOW_HOME=${RUNNER_TEMP}/airflow-home" >> "$GITHUB_ENV"
+          echo "AIRFLOW_CONFIG=${RUNNER_TEMP}/airflow-home/airflow.cfg" >> "$GITHUB_ENV"
+          echo "AIRFLOW_DATA_DIR=${RUNNER_TEMP}/airflow-home/data" >> "$GITHUB_ENV"
+          echo "AIRFLOW_PLUGINS_DIR=${RUNNER_TEMP}/airflow-home/plugins" >> "$GITHUB_ENV"
+          echo "AIRFLOW_DB_PATH=${RUNNER_TEMP}/airflow-home/airflow.db" >> "$GITHUB_ENV"
+          echo "AIRFLOW_PLUGIN_ZIP=${RUNNER_TEMP}/airflow-home/plugins/rbac_providers_auth_manager.zip" >> "$GITHUB_ENV"
+          echo "AIRFLOW_PERMISSIONS_INI=${RUNNER_TEMP}/airflow-home/plugins/rbac_providers_auth_manager_permissions.ini" >> "$GITHUB_ENV"
+
+      - name: Show context
+        run: |
+          echo "Repository:              $GITHUB_REPOSITORY"
+          echo "Ref:                     $GITHUB_REF"
+          echo "SHA:                     $GITHUB_SHA"
+          echo "Python:                  $(python --version)"
+          echo "Airflow:                 ${AIRFLOW_VERSION}"
+          echo "AIRFLOW_HOME:            $AIRFLOW_HOME"
+          echo "AIRFLOW_CONFIG:          $AIRFLOW_CONFIG"
+          echo "AIRFLOW_PLUGINS_DIR:     $AIRFLOW_PLUGINS_DIR"
+          echo "AIRFLOW_DATA_DIR:        $AIRFLOW_DATA_DIR"
+          echo "AIRFLOW_DB_PATH:         $AIRFLOW_DB_PATH"
+          echo "AIRFLOW_PLUGIN_ZIP:      $AIRFLOW_PLUGIN_ZIP"
+          echo "AIRFLOW_PERMISSIONS_INI: $AIRFLOW_PERMISSIONS_INI"
+
+      - name: Upgrade packaging tools
+        run: python -m pip install --upgrade pip setuptools wheel
+
+      - name: Install build prerequisites for python-ldap
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libldap2-dev libsasl2-dev libssl-dev
+
+      - name: Install Airflow core with matching constraints
+        run: |
+          python -m pip install "apache-airflow==${AIRFLOW_VERSION}" \
+            --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-${{ inputs.python-version }}.txt"
+
+      - name: Install test dependencies and python-ldap
+        run: |
+          python -m pip install -r requirements-dev.txt
+          python -m pip install redis python-ldap
+
+      - name: Prepare Airflow directories and stage plugin archive
+        run: |
+          set -e
+          mkdir -p "$AIRFLOW_HOME" "$AIRFLOW_DATA_DIR" "$AIRFLOW_PLUGINS_DIR"
+
+          python - <<'PY'
+          import os
+          import shutil
+          import zipfile
+          from pathlib import Path
+
+          pkg = os.environ["PACKAGE_NAME"]
+          zip_path = Path(os.environ["AIRFLOW_PLUGIN_ZIP"])
+          permissions_dst = Path(os.environ["AIRFLOW_PERMISSIONS_INI"])
+          build_root = Path(os.environ["RUNNER_TEMP"]) / "plugin-build" / pkg
+
+          if build_root.exists():
+              shutil.rmtree(build_root)
+          build_root.mkdir(parents=True, exist_ok=True)
+
+          allowed = [
+              "__init__.py",
+              "auth_manager.py",
+              "config.py",
+              "api",
+              "authorization",
+              "compatibility",
+              "config_runtime",
+              "core",
+              "entrypoints",
+              "identity",
+              "providers",
+              "runtime",
+              "services",
+              "ui",
+          ]
+
+          for name in allowed:
+              src = Path(name)
+              if not src.exists():
+                  continue
+              dst = build_root / name
+              if src.is_dir():
+                  shutil.copytree(src, dst, dirs_exist_ok=True)
+              else:
+                  dst.parent.mkdir(parents=True, exist_ok=True)
+                  shutil.copy2(src, dst)
+
+          permission_candidates = [
+              Path("config_runtime/permissions.ini"),
+              Path("permissions.ini"),
+              build_root / "config_runtime" / "permissions.ini",
+          ]
+          copied = False
+          for candidate in permission_candidates:
+              if candidate.exists():
+                  permissions_dst.parent.mkdir(parents=True, exist_ok=True)
+                  shutil.copy2(candidate, permissions_dst)
+                  copied = True
+                  break
+
+          if not copied:
+              raise SystemExit("Could not locate permissions.ini for staging")
+
+          zip_path.parent.mkdir(parents=True, exist_ok=True)
+          with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+              for path in sorted(build_root.rglob("*")):
+                  arcname = Path(pkg) / path.relative_to(build_root)
+                  zf.write(path, arcname)
+
+          print(f"staged plugin archive into {zip_path}")
+          print(f"staged permissions.ini into {permissions_dst}")
+          PY
+
+          echo "==> list AIRFLOW_HOME"
+          find "$AIRFLOW_HOME" -maxdepth 3 -print | sort
+
+          echo "==> list AIRFLOW_PLUGINS_DIR"
+          find "$AIRFLOW_PLUGINS_DIR" -maxdepth 4 -print | sort
+
+          echo "==> list AIRFLOW_DATA_DIR"
+          find "$AIRFLOW_DATA_DIR" -maxdepth 3 -print | sort || true
+
+          echo "==> zip content"
+          python - <<'PY'
+          import os
+          import zipfile
+
+          with zipfile.ZipFile(os.environ["AIRFLOW_PLUGIN_ZIP"]) as zf:
+              for name in zf.namelist():
+                  print(name)
+          PY
+
+      - name: Export plugin archive into PYTHONPATH
+        run: |
+          echo "PYTHONPATH=${AIRFLOW_PLUGIN_ZIP}" >> "$GITHUB_ENV"
+
+      - name: Create and patch airflow.cfg
+        run: |
+          set -e
+          python - <<'PY'
+          import configparser
+          import os
+          from pathlib import Path
+
+          cfg_path = Path(os.environ["AIRFLOW_CONFIG"])
+          cfg_path.parent.mkdir(parents=True, exist_ok=True)
+
+          cfg = configparser.ConfigParser()
+          if cfg_path.exists():
+              cfg.read(cfg_path)
+
+          if "core" not in cfg:
+              cfg["core"] = {}
+          if "database" not in cfg:
+              cfg["database"] = {}
+          if "api_auth" not in cfg:
+              cfg["api_auth"] = {}
+
+          cfg["core"]["auth_manager"] = "rbac_providers_auth_manager.auth_manager.ItimLdapAuthManager"
+          cfg["core"]["itim_ldap_permissions_ini"] = os.environ["AIRFLOW_PERMISSIONS_INI"]
+          cfg["core"]["plugins_folder"] = os.environ["AIRFLOW_PLUGINS_DIR"]
+          cfg["core"]["lazy_load_plugins"] = "False"
+          cfg["core"]["load_examples"] = "False"
+          cfg["database"]["sql_alchemy_conn"] = f"sqlite:///{os.environ['AIRFLOW_DB_PATH']}"
+
+          cfg["api_auth"]["jwt_secret"] = "ci-only-jwt-secret-not-for-production-change-me-0123456789"
+          cfg["api_auth"]["jwt_algorithm"] = "HS512"
+          cfg["api_auth"]["jwt_audience"] = "urn:airflow.apache.org:task"
+
+          with cfg_path.open("w", encoding="utf-8") as fh:
+              cfg.write(fh)
+
+          print(f"patched airflow.cfg at {cfg_path}")
+          PY
+
+          echo "==> airflow.cfg"
+          cat "$AIRFLOW_CONFIG"
+
+      - name: Show effective Airflow config values
+        run: |
+          python - <<'PY'
+          import os
+          from airflow.configuration import conf
+
+          print("AIRFLOW_HOME =", os.environ["AIRFLOW_HOME"])
+          print("AIRFLOW_CONFIG =", os.environ["AIRFLOW_CONFIG"])
+          print("AIRFLOW_PLUGINS_DIR =", os.environ["AIRFLOW_PLUGINS_DIR"])
+          print("AIRFLOW_DATA_DIR =", os.environ["AIRFLOW_DATA_DIR"])
+          print("AIRFLOW_DB_PATH =", os.environ["AIRFLOW_DB_PATH"])
+          print("AIRFLOW_PLUGIN_ZIP =", os.environ["AIRFLOW_PLUGIN_ZIP"])
+          print("AIRFLOW_PERMISSIONS_INI =", os.environ["AIRFLOW_PERMISSIONS_INI"])
+          print("PYTHONPATH =", os.environ.get("PYTHONPATH"))
+          print("core.auth_manager =", conf.get("core", "auth_manager"))
+          print("core.itim_ldap_permissions_ini =", conf.get("core", "itim_ldap_permissions_ini"))
+          print("core.plugins_folder =", conf.get("core", "plugins_folder"))
+          print("api_auth.jwt_algorithm =", conf.get("api_auth", "jwt_algorithm"))
+          print("api_auth.jwt_audience =", conf.get("api_auth", "jwt_audience"))
+          print("api_auth.jwt_secret_set =", bool(conf.get("api_auth", "jwt_secret", fallback="")))
+          PY
+
+      - name: Airflow info
+        run: python -m airflow info
+
+      - name: Debug Python import path
+        run: |
+          python - <<'PY'
+          import os
+          import sys
+          print("cwd =", os.getcwd())
+          print("PYTHONPATH =", os.environ.get("PYTHONPATH"))
+          print("sys.path =", sys.path)
+          PY
+
+      - name: Pre-DB auth manager import and ldap smoke
+        run: |
+          python - <<'PY'
+          import os
+          import sys
+          import ldap
+
+          print("plugin zip =", os.environ["AIRFLOW_PLUGIN_ZIP"])
+          print("effective sys.path =", sys.path)
+          print("python-ldap version =", getattr(ldap, "__version__", "unknown"))
+
+          from rbac_providers_auth_manager.auth_manager import ItimLdapAuthManager
+          print("loaded auth manager =", ItimLdapAuthManager.__name__)
+          PY
+
+      - name: Pre-DB API server info smoke
+        continue-on-error: true
+        run: |
+          set +e
+          AIRFLOW__LOGGING__LOGGING_LEVEL=INFO python -m airflow api-server >"$AIRFLOW_HOME/api-pre-db.log" 2>&1 &
+          API_PID=$!
+          echo "pre-db api-server pid=$API_PID"
+          sleep 20
+          echo "==> pre-db api-server log"
+          cat "$AIRFLOW_HOME/api-pre-db.log" || true
+          kill "$API_PID" >/dev/null 2>&1 || true
+          wait "$API_PID" >/dev/null 2>&1 || true
+          exit 0
+
+      - name: Airflow DB bootstrap smoke
+        run: |
+          mkdir -p "$AIRFLOW_HOME"
+          python -m airflow db migrate
+
+      - name: Post-DB API server info smoke
+        run: |
+          set -e
+          AIRFLOW__LOGGING__LOGGING_LEVEL=INFO python -m airflow api-server >"$AIRFLOW_HOME/api-post-db.log" 2>&1 &
+          API_PID=$!
+          echo "post-db api-server pid=$API_PID"
+
+          for i in $(seq 1 30); do
+            if curl -fsS "http://127.0.0.1:8080/api/v2/monitor/health" >"$AIRFLOW_HOME/health.json"; then
+              break
+            fi
+            sleep 2
+          done
+
+          echo "==> post-db api-server log"
+          cat "$AIRFLOW_HOME/api-post-db.log" || true
+
+          if ! ps -p "$API_PID" >/dev/null 2>&1; then
+            echo "api-server exited unexpectedly"
+            exit 1
+          fi
+
+          if [ ! -s "$AIRFLOW_HOME/health.json" ]; then
+            echo "health endpoint did not respond"
+            exit 1
+          fi
+
+          echo "==> health.json"
+          cat "$AIRFLOW_HOME/health.json"
+
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          data = json.loads(Path(os.environ["AIRFLOW_HOME"], "health.json").read_text(encoding="utf-8"))
+          metadb = (data.get("metadatabase") or {}).get("status")
+          if metadb != "healthy":
+              raise SystemExit(f"metadatabase health is not healthy: {metadb!r}")
+          print("validated metadatabase health:", metadb)
+          PY
+
+          grep -q "Initialized ITIM auth manager" "$AIRFLOW_HOME/api-post-db.log"
+          grep -q "Application startup complete" "$AIRFLOW_HOME/api-post-db.log"
+
+          kill "$API_PID" >/dev/null 2>&1 || true
+          wait "$API_PID" >/dev/null 2>&1 || true
+
+      - name: Run Airflow-aware smoke tests
+        run: python -m pytest -q --maxfail=1 --disable-warnings tests/ci -k airflow

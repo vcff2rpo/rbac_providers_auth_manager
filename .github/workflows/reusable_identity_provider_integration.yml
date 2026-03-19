@@ -1,0 +1,138 @@
+name: reusable identity provider integration
+
+on:
+  workflow_call:
+    inputs:
+      package-name:
+        description: Python package name
+        required: false
+        type: string
+        default: rbac_providers_auth_manager
+      python-version:
+        description: Python version for identity-provider integration tests
+        required: false
+        type: string
+        default: "3.13"
+
+permissions:
+  contents: read
+
+jobs:
+  identity-provider-integration:
+    name: identity provider integration (Python ${{ inputs.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      PACKAGE_NAME: ${{ inputs.package-name }}
+      PYTHONPATH: ${{ github.workspace }}/..
+      LDAP_TEST_URI: ldap://127.0.0.1:1389
+      LDAP_TEST_BIND_DN: cn=admin,dc=example,dc=org
+      LDAP_TEST_BIND_PASSWORD: adminpassword
+      LDAP_TEST_USER_BASE_DN: ou=users,dc=example,dc=org
+      LDAP_TEST_SEARCH_BASE: ou=users,dc=example,dc=org
+      LDAP_TEST_USER_FILTER: (uid={username})
+      LDAP_TEST_USERNAME: user01
+      LDAP_TEST_PASSWORD: bitnami1
+
+    services:
+      ldap:
+        image: bitnami/openldap:latest
+        env:
+          LDAP_PORT_NUMBER: 1389
+          LDAP_ROOT: dc=example,dc=org
+          LDAP_ADMIN_USERNAME: admin
+          LDAP_ADMIN_PASSWORD: adminpassword
+          LDAP_USERS: user01
+          LDAP_PASSWORDS: bitnami1
+          LDAP_USER_OU: users
+          LDAP_GROUP_OU: groups
+          LDAP_GROUP: readers
+          LDAP_ALLOW_ANON_BINDING: no
+          BITNAMI_DEBUG: "true"
+        ports:
+          - 1389:1389
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ inputs.python-version }}
+          cache: pip
+          cache-dependency-path: |
+            requirements-dev.txt
+            tests/ci/*.py
+
+      - name: Upgrade packaging tools
+        run: python -m pip install --upgrade pip setuptools wheel
+
+      - name: Install build prerequisites for python-ldap
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libldap2-dev libsasl2-dev libssl-dev
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install -r requirements-dev.txt
+          python -m pip install python-ldap requests
+
+      - name: Wait for LDAP service
+        run: |
+          python - <<'PY'
+          import socket
+          import time
+
+          host = "127.0.0.1"
+          port = 1389
+          for attempt in range(1, 61):
+              try:
+                  with socket.create_connection((host, port), timeout=2):
+                      print(f"LDAP port became reachable on attempt {attempt}")
+                      break
+              except OSError as exc:
+                  print(f"waiting for LDAP service attempt={attempt} error={exc}")
+                  time.sleep(2)
+          else:
+              raise SystemExit("LDAP service did not become reachable in time")
+          PY
+
+      - name: LDAP bind smoke
+        run: |
+          python - <<'PY'
+          import ldap
+          import os
+          import time
+
+          uri = os.environ["LDAP_TEST_URI"]
+          bind_dn = os.environ["LDAP_TEST_BIND_DN"]
+          bind_password = os.environ["LDAP_TEST_BIND_PASSWORD"]
+
+          for attempt in range(1, 16):
+              conn = None
+              try:
+                  conn = ldap.initialize(uri)
+                  conn.simple_bind_s(bind_dn, bind_password)
+                  print(f"LDAP bind succeeded on attempt {attempt}")
+                  break
+              except ldap.LDAPError as exc:
+                  print(f"LDAP bind not ready yet attempt={attempt} error={exc}")
+                  time.sleep(2)
+              finally:
+                  if conn is not None:
+                      try:
+                          conn.unbind_s()
+                      except Exception:
+                          pass
+          else:
+              raise SystemExit("LDAP bind smoke never succeeded")
+          PY
+
+      - name: Run identity-provider integration tests
+        run: |
+          python -m pytest -q --maxfail=1 --disable-warnings \
+            tests/ci/test_ldap_live_container_integration.py \
+            tests/ci/test_entra_browser_flow_integration.py
