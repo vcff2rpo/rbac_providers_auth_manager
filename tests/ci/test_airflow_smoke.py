@@ -17,7 +17,11 @@ def test_entrypoint_fastapi_app_builds_under_airflow() -> None:
 
     manager = ItimLdapAuthManager(context=None)
     app = manager.get_fastapi_app()
-    route_paths = sorted(route.path for route in app.routes)
+    route_paths = sorted(
+        path
+        for path in (getattr(route, "path", None) for route in app.routes)
+        if isinstance(path, str)
+    )
     print("airflow_route_paths=", route_paths)
 
     assert any(path.endswith("/login") for path in route_paths)
