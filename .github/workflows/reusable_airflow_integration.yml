@@ -242,6 +242,11 @@ jobs:
           set -o pipefail
           python -m airflow info 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/airflow-info.log"
 
+      - name: Airflow version
+        run: |
+          set -o pipefail
+          python -m airflow version 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/airflow-version.log"
+
       - name: Debug Python import path
         run: |
           python - <<'PY' 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/python-path.log"
@@ -270,20 +275,41 @@ jobs:
           set -o pipefail
           AIRFLOW__LOGGING__LOGGING_LEVEL=DEBUG python -m airflow db migrate 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/airflow-db-migrate.log"
 
-      - name: Discover hello world DAG and tasks
+      - name: Discover hello world DAG and tasks using supported Airflow CLI
         run: |
           set -o pipefail
-          python -m airflow dags list 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/airflow-dags-list.log"
-          python -m airflow tasks list hello_world_ci 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/airflow-tasks-list.log"
+          python -m airflow dags list --output json 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/airflow-dags-list.json"
+          python -m airflow tasks list hello_world_ci --output json 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/airflow-tasks-list.json"
           {
             echo "Graphviz-dependent DAG rendering is intentionally skipped in CI."
             echo "DAG discovery is validated through 'airflow dags list', 'airflow tasks list', and 'airflow dags test'."
-          } | tee "$AIRFLOW_CI_ARTIFACTS/airflow-dag-show.log"
+          } | tee "$AIRFLOW_CI_ARTIFACTS/airflow-dag-rendering-skipped.log"
+
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          artifacts = Path(os.environ["AIRFLOW_CI_ARTIFACTS"])
+          dags = json.loads((artifacts / "airflow-dags-list.json").read_text(encoding="utf-8"))
+          tasks = json.loads((artifacts / "airflow-tasks-list.json").read_text(encoding="utf-8"))
+
+          dag_ids = {item.get("dag_id") for item in dags if isinstance(item, dict)}
+          task_ids = {item.get("task_id") for item in tasks if isinstance(item, dict)}
+          if "hello_world_ci" not in dag_ids:
+              raise SystemExit(f"hello_world_ci not discovered in dags list: {sorted(dag_ids)}")
+          expected = {"start", "hello", "done"}
+          if not expected.issubset(task_ids):
+              raise SystemExit(f"Missing expected tasks. got={sorted(task_ids)} expected={sorted(expected)}")
+          print("validated dag discovery for hello_world_ci")
+          print("validated task discovery:", sorted(task_ids))
+          PY
 
       - name: Execute hello world DAG test run
         run: |
           set -o pipefail
           python -m airflow dags test hello_world_ci 2026-03-19T00:00:00+00:00 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/airflow-dags-test.log"
+          python -m airflow tasks states-for-dag-run hello_world_ci 2026-03-19T00:00:00+00:00 --output json 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/airflow-task-states.json"
 
       - name: Start API server and capture verbose logs
         run: |
@@ -353,10 +379,13 @@ jobs:
             echo "# Airflow integration summary"
             echo ""
             echo "- airflow-info.log"
+            echo "- airflow-version.log"
             echo "- airflow-db-migrate.log"
-            echo "- airflow-dags-list.log"
-            echo "- airflow-tasks-list.log"
+            echo "- airflow-dags-list.json"
+            echo "- airflow-tasks-list.json"
+            echo "- airflow-dag-rendering-skipped.log"
             echo "- airflow-dags-test.log"
+            echo "- airflow-task-states.json"
             echo "- api-server.log"
             echo "- health.json"
             echo "- version.json"
