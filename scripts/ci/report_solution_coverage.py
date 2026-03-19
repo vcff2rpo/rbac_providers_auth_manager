@@ -20,7 +20,9 @@ def main() -> None:
     artifact_dir = REPO_ROOT / ".ci-artifacts" / "coverage-report"
     artifact_dir.mkdir(parents=True, exist_ok=True)
 
-    covered = [item for item in manifest.CAPABILITY_CATALOG if item["status"] == "covered"]
+    covered = [
+        item for item in manifest.CAPABILITY_CATALOG if item["status"] == "covered"
+    ]
     gaps = [item for item in manifest.CAPABILITY_CATALOG if item["status"] != "covered"]
     total = len(manifest.CAPABILITY_CATALOG)
     covered_count = len(covered)

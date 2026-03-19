@@ -17,7 +17,9 @@ def main() -> None:
         if section not in cfg:
             cfg[section] = {}
 
-    cfg["core"]["auth_manager"] = "rbac_providers_auth_manager.auth_manager.RbacAuthManager"
+    cfg["core"]["auth_manager"] = (
+        "rbac_providers_auth_manager.auth_manager.RbacAuthManager"
+    )
     cfg["core"]["itim_ldap_permissions_ini"] = os.environ["AIRFLOW_PERMISSIONS_INI"]
     cfg["core"]["plugins_folder"] = os.environ["AIRFLOW_PLUGINS_DIR"]
     cfg["core"]["dags_folder"] = os.environ["AIRFLOW_DAGS_DIR"]
@@ -27,7 +29,9 @@ def main() -> None:
     cfg["api"]["base_url"] = "http://127.0.0.1:8080"
     cfg["logging"]["logging_level"] = "DEBUG"
 
-    cfg["api_auth"]["jwt_secret"] = "ci-only-jwt-secret-not-for-production-change-me-0123456789"
+    cfg["api_auth"]["jwt_secret"] = (
+        "ci-only-jwt-secret-not-for-production-change-me-0123456789"
+    )
     cfg["api_auth"]["jwt_algorithm"] = "HS512"
     cfg["api_auth"]["jwt_audience"] = "urn:airflow.apache.org:task"
 

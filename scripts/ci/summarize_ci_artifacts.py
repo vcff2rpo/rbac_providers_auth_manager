@@ -47,7 +47,9 @@ def _tail_lines(path: Path, limit: int) -> list[str]:
     return lines[-limit:]
 
 
-def build_summary(artifact_dir: Path, lane_name: str, tail_limit: int) -> dict[str, object]:
+def build_summary(
+    artifact_dir: Path, lane_name: str, tail_limit: int
+) -> dict[str, object]:
     files = _iter_files(artifact_dir)
     logs = _candidate_logs(files)
     first_failure: dict[str, str] | None = None
@@ -76,7 +78,9 @@ def build_summary(artifact_dir: Path, lane_name: str, tail_limit: int) -> dict[s
     }
 
 
-def write_outputs(summary: dict[str, object], output_md: Path, output_json: Path) -> None:
+def write_outputs(
+    summary: dict[str, object], output_md: Path, output_json: Path
+) -> None:
     output_json.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
 
     lines = [
@@ -111,7 +115,9 @@ def write_outputs(summary: dict[str, object], output_md: Path, output_json: Path
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Summarize CI artifact directory contents.")
+    parser = argparse.ArgumentParser(
+        description="Summarize CI artifact directory contents."
+    )
     parser.add_argument("--artifact-dir", required=True)
     parser.add_argument("--lane-name", required=True)
     parser.add_argument("--output-md", required=True)

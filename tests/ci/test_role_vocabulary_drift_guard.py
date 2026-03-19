@@ -99,5 +99,7 @@ def test_action_vocabulary_is_known_and_stable() -> None:
         "can_read",
         "menu_access",
     }
-    assert actions <= allowed, f"Unknown action vocabulary detected: {sorted(actions - allowed)}"
+    assert actions <= allowed, (
+        f"Unknown action vocabulary detected: {sorted(actions - allowed)}"
+    )
     assert {"can_read", "menu_access"}.issubset(actions)

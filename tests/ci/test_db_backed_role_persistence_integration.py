@@ -17,13 +17,17 @@ EXPECTED_TABLES = {
 
 
 def _sqlite_path_from_env() -> Path:
-    raw = os.environ.get("REAL_AIRFLOW_DB_URI") or os.environ.get("AIRFLOW__DATABASE__SQL_ALCHEMY_CONN")
+    raw = os.environ.get("REAL_AIRFLOW_DB_URI") or os.environ.get(
+        "AIRFLOW__DATABASE__SQL_ALCHEMY_CONN"
+    )
     if raw and raw.startswith("sqlite:///"):
         return Path(raw.removeprefix("sqlite:///"))
     path = os.environ.get("AIRFLOW_DB_PATH")
     if path:
         return Path(path)
-    pytest.skip("No sqlite-backed Airflow metadata DB path is available for DB persistence validation")
+    pytest.skip(
+        "No sqlite-backed Airflow metadata DB path is available for DB persistence validation"
+    )
 
 
 def test_db_backed_roles_are_persisted_in_airflow_metadata_db() -> None:
@@ -45,7 +49,9 @@ def test_db_backed_roles_are_persisted_in_airflow_metadata_db() -> None:
 
         expected_roles = {
             item.strip()
-            for item in os.environ.get("REAL_EXPECTED_DB_ROLES", "Admin,Op,User,Viewer").split(",")
+            for item in os.environ.get(
+                "REAL_EXPECTED_DB_ROLES", "Admin,Op,User,Viewer"
+            ).split(",")
             if item.strip()
         }
         assert expected_roles.issubset(roles)

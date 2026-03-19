@@ -6,7 +6,9 @@ import pytest
 
 from rbac_providers_auth_manager.config_runtime.models import EntraIdConfig
 from rbac_providers_auth_manager.providers.entra_http_service import EntraHttpService
-from rbac_providers_auth_manager.providers.entra_identity_service import EntraIdentityService
+from rbac_providers_auth_manager.providers.entra_identity_service import (
+    EntraIdentityService,
+)
 
 
 def _require_or_skip(name: str) -> str:
@@ -41,7 +43,9 @@ def test_real_entra_tenant_authorization_code_callback() -> None:
         roles_claim_key="groups",
         verify_signature=True,
         allowed_audiences=(client_id,),
-        http_timeout_seconds=int(os.environ.get("REAL_ENTRA_HTTP_TIMEOUT_SECONDS", "20")),
+        http_timeout_seconds=int(
+            os.environ.get("REAL_ENTRA_HTTP_TIMEOUT_SECONDS", "20")
+        ),
         http_max_retries=1,
         http_retry_backoff_seconds=1,
         metadata_url=f"https://login.microsoftonline.com/{tenant_id}/v2.0/.well-known/openid-configuration",
@@ -54,7 +58,9 @@ def test_real_entra_tenant_authorization_code_callback() -> None:
         first_name_claim="given_name",
         last_name_claim="family_name",
         display_name_claim="name",
-        graph_fetch_groups_on_overage=bool(os.environ.get("REAL_ENTRA_GRAPH_FETCH_GROUPS", "").strip()),
+        graph_fetch_groups_on_overage=bool(
+            os.environ.get("REAL_ENTRA_GRAPH_FETCH_GROUPS", "").strip()
+        ),
         graph_memberof_url="https://graph.microsoft.com/v1.0/me/transitiveMemberOf?$select=id,displayName",
         enable_pkce=bool(code_verifier),
         clock_skew_seconds=30,

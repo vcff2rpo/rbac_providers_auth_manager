@@ -26,7 +26,9 @@ def test_real_enterprise_ldap_schema_and_group_profile() -> None:
     user_filter = os.environ.get("REAL_LDAP_USER_FILTER", "(uid={username})")
     group_attr = os.environ.get("REAL_LDAP_GROUP_ATTR", "memberOf")
     expected_attrs = [
-        item.strip() for item in os.environ.get("REAL_LDAP_EXPECTED_ATTRS", "cn,mail").split(",") if item.strip()
+        item.strip()
+        for item in os.environ.get("REAL_LDAP_EXPECTED_ATTRS", "cn,mail").split(",")
+        if item.strip()
     ]
     expected_groups = [
         item.strip().lower()

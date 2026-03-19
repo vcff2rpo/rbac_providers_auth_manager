@@ -55,7 +55,9 @@ def test_viewer_role_contains_latest_fab_350_non_db_baseline() -> None:
         ("menu_access", "Task Instances"),
     }
     missing = expected - viewer
-    assert not missing, f"Viewer is missing latest FAB 3.5.0 mirrored permissions: {sorted(missing)}"
+    assert not missing, (
+        f"Viewer is missing latest FAB 3.5.0 mirrored permissions: {sorted(missing)}"
+    )
 
 
 def test_user_role_contains_latest_fab_350_additions() -> None:
@@ -73,7 +75,9 @@ def test_user_role_contains_latest_fab_350_additions() -> None:
         ("can_create", "Assets"),
     }
     missing = expected - user
-    assert not missing, f"User is missing latest FAB 3.5.0 mirrored permissions: {sorted(missing)}"
+    assert not missing, (
+        f"User is missing latest FAB 3.5.0 mirrored permissions: {sorted(missing)}"
+    )
 
 
 def test_op_role_contains_latest_fab_350_additions() -> None:
@@ -112,7 +116,9 @@ def test_op_role_contains_latest_fab_350_additions() -> None:
         ("can_delete", "Backfills"),
     }
     missing = expected - op
-    assert not missing, f"Op is missing latest FAB 3.5.0 mirrored permissions: {sorted(missing)}"
+    assert not missing, (
+        f"Op is missing latest FAB 3.5.0 mirrored permissions: {sorted(missing)}"
+    )
 
 
 def test_admin_role_contains_latest_fab_350_non_db_admin_additions() -> None:
@@ -126,4 +132,6 @@ def test_admin_role_contains_latest_fab_350_non_db_admin_additions() -> None:
         ("menu_access", "Triggers"),
     }
     missing = expected - admin
-    assert not missing, f"Admin is missing latest FAB 3.5.0 mirrored permissions: {sorted(missing)}"
+    assert not missing, (
+        f"Admin is missing latest FAB 3.5.0 mirrored permissions: {sorted(missing)}"
+    )
