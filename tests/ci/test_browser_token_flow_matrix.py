@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from fastapi.responses import HTMLResponse, RedirectResponse
