@@ -33,6 +33,11 @@ on:
         required: true
         default: false
         type: boolean
+      run_license_compliance:
+        description: Run OSS license, SBOM, and static security compliance lane
+        required: true
+        default: true
+        type: boolean
       require_external_secrets:
         description: Fail instead of skip when external LDAP/Entra variables are missing
         required: true
@@ -110,6 +115,13 @@ jobs:
       python-version: "3.13"
       require-external-secrets: ${{ inputs.require_external_secrets }}
 
+  license_compliance:
+    if: ${{ inputs.run_license_compliance }}
+    uses: ./.github/workflows/reusable_license_compliance.yml
+    with:
+      package-name: rbac_providers_auth_manager
+      python-version: "3.13"
+
   review_pr_gate:
     if: ${{ always() && github.ref_name == 'v86' }}
     needs:
@@ -120,6 +132,7 @@ jobs:
       - fab_provider_validation
       - nightly_compatibility
       - external_real_validation
+      - license_compliance
     permissions:
       contents: write
       pull-requests: write
@@ -146,5 +159,7 @@ jobs:
       nightly-compatibility-result: ${{ inputs.run_nightly_compatibility && needs.nightly_compatibility.result || 'skipped' }}
       external-real-validation-enabled: ${{ inputs.run_external_real_validation }}
       external-real-validation-result: ${{ inputs.run_external_real_validation && needs.external_real_validation.result || 'skipped' }}
+      license-compliance-enabled: ${{ inputs.run_license_compliance }}
+      license-compliance-result: ${{ inputs.run_license_compliance && needs.license_compliance.result || 'skipped' }}
       run-url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       source-sha: ${{ github.sha }}
