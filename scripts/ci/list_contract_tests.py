@@ -33,10 +33,15 @@ def main() -> None:
     parser.add_argument("--group", choices=GROUPS)
     parser.add_argument("--family", choices=list(manifest.coverage_family_names()))
     parser.add_argument("--threshold", action="store_true")
+    parser.add_argument("--cov-targets", action="store_true")
     args = parser.parse_args()
 
     if args.family and args.threshold:
         print(manifest.coverage_family_threshold(args.family))
+        return
+    if args.family and args.cov_targets:
+        cov_targets = tuple(manifest.COVERAGE_FAMILIES[args.family]["cov_targets"])
+        print(" ".join(cov_targets))
         return
     if args.suite:
         print(" ".join(manifest.suite_files(args.suite)))
