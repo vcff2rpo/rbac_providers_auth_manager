@@ -180,11 +180,16 @@ jobs:
         run: |
           echo "QUALITY_TEST_FILES=$(python scripts/ci/list_contract_tests.py --family '${{ matrix.family }}')" >> "$GITHUB_ENV"
           echo "FAMILY_THRESHOLD=$(python scripts/ci/list_contract_tests.py --family '${{ matrix.family }}' --threshold)" >> "$GITHUB_ENV"
+          echo "FAMILY_COV_TARGETS=$(python scripts/ci/list_contract_tests.py --family '${{ matrix.family }}' --cov-targets)" >> "$GITHUB_ENV"
       - name: Run family coverage gate with detailed logs
         run: |
-          set -o pipefail
+          set -euo pipefail
           mkdir -p "$QUALITY_ARTIFACT_DIR"
-          python -m pytest $PYTEST_VERBOSE_ARGS             --maxfail=1             --disable-warnings             --junitxml="$QUALITY_ARTIFACT_DIR/pytest-${{ matrix.family }}.xml"             --cov="$PACKAGE_NAME"             --cov-report=term-missing             --cov-report=xml:$QUALITY_ARTIFACT_DIR/coverage-${{ matrix.family }}.xml             --cov-fail-under=$FAMILY_THRESHOLD             $QUALITY_TEST_FILES 2>&1 | tee "$QUALITY_ARTIFACT_DIR/pytest-${{ matrix.family }}.log"
+          cov_args=()
+          for target in $FAMILY_COV_TARGETS; do
+            cov_args+=("--cov=$target")
+          done
+          python -m pytest $PYTEST_VERBOSE_ARGS             --maxfail=1             --disable-warnings             --junitxml="$QUALITY_ARTIFACT_DIR/pytest-${{ matrix.family }}.xml"             "${cov_args[@]}"             --cov-report=term-missing             --cov-report=xml:$QUALITY_ARTIFACT_DIR/coverage-${{ matrix.family }}.xml             --cov-fail-under=$FAMILY_THRESHOLD             $QUALITY_TEST_FILES 2>&1 | tee "$QUALITY_ARTIFACT_DIR/pytest-${{ matrix.family }}.log"
       - name: Upload family coverage artifacts
         if: always()
         uses: actions/upload-artifact@v4

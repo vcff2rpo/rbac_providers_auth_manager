@@ -11,6 +11,7 @@ TEST_ROOT: Final[Path] = REPO_ROOT / "tests" / "ci"
 class CoverageFamily(TypedDict):
     threshold: int
     files: tuple[str, ...]
+    cov_targets: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -210,6 +211,12 @@ COVERAGE_FAMILIES: Final[dict[str, CoverageFamily]] = {
             "tests/ci/test_runtime_security_and_logging.py",
             "tests/ci/test_runtime_smoke.py",
         ),
+        "cov_targets": (
+            "rbac_providers_auth_manager.config",
+            "rbac_providers_auth_manager.config_runtime",
+            "rbac_providers_auth_manager.runtime",
+            "rbac_providers_auth_manager.core",
+        ),
     },
     "rbac-mirror": {
         "threshold": 35,
@@ -219,6 +226,10 @@ COVERAGE_FAMILIES: Final[dict[str, CoverageFamily]] = {
             "tests/ci/test_identity_mapping_matrix.py",
             "tests/ci/test_role_vocabulary_drift_guard.py",
         ),
+        "cov_targets": (
+            "rbac_providers_auth_manager.authorization",
+            "rbac_providers_auth_manager.identity",
+        ),
     },
     "browser-flows": {
         "threshold": 40,
@@ -227,6 +238,12 @@ COVERAGE_FAMILIES: Final[dict[str, CoverageFamily]] = {
             "tests/ci/test_browser_token_flow_matrix.py",
             "tests/ci/test_entra_browser_flow_integration.py",
         ),
+        "cov_targets": (
+            "rbac_providers_auth_manager.api",
+            "rbac_providers_auth_manager.entrypoints",
+            "rbac_providers_auth_manager.services",
+            "rbac_providers_auth_manager.ui",
+        ),
     },
     "provider-simulations": {
         "threshold": 35,
@@ -234,10 +251,16 @@ COVERAGE_FAMILIES: Final[dict[str, CoverageFamily]] = {
             "tests/ci/test_ldap_backend_simulation.py",
             "tests/ci/test_entra_backend_simulation.py",
         ),
+        "cov_targets": (
+            "rbac_providers_auth_manager.providers",
+            "rbac_providers_auth_manager.identity",
+            "rbac_providers_auth_manager.services",
+        ),
     },
     "bootstrap-imports": {
         "threshold": 5,
         "files": ("tests/ci/test_import_smoke.py",),
+        "cov_targets": ("rbac_providers_auth_manager",),
     },
 }
 
