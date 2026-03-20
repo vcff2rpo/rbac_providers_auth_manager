@@ -1,3 +1,0 @@
-Artifact inventory for current run
-
-ci_review/artifacts/coverage-xml/coverage.xml

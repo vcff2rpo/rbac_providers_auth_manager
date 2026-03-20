@@ -21,6 +21,7 @@ def test_support_report_contains_all_expected_roles_and_counts() -> None:
         assert role_name in report.supported_permission_counts
         assert role_name in report.official_permissions_by_role
         assert role_name in report.supported_official_permissions_by_role
+        assert role_name in report.plugin_contract_permissions_by_role
         assert (
             report.supported_permission_counts[role_name]
             <= report.official_permission_counts[role_name]
@@ -34,3 +35,13 @@ def test_support_report_has_no_missing_official_permissions_per_role() -> None:
         assert not missing, (
             f"Role {role_name} is missing official FAB permissions: {missing}"
         )
+
+
+def test_support_report_contains_deduped_constant_catalogs() -> None:
+    report = build_support_report()
+    assert report.official_action_constants
+    assert report.official_resource_constants
+    assert report.plugin_action_constants
+    assert report.plugin_resource_constants
+    assert not report.missing_action_constants_in_plugin
+    assert not report.missing_resource_constants_in_plugin

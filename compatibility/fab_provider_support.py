@@ -2,20 +2,21 @@ from __future__ import annotations
 
 import importlib
 import json
+import platform
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Final
 
+from rbac_providers_auth_manager.authorization import vocabulary as vocab
 from rbac_providers_auth_manager.authorization.compat_matrix import (
     build_non_admin_compatibility_matrix,
     evaluate_non_admin_role_consistency,
 )
+from rbac_providers_auth_manager.authorization.rbac import RbacPolicy
 from rbac_providers_auth_manager.authorization.resource_contracts import (
     NON_ADMIN_RESOURCE_CONTRACTS,
     role_meets_minimum,
 )
-from rbac_providers_auth_manager.authorization.rbac import RbacPolicy
-from rbac_providers_auth_manager.authorization import vocabulary as vocab
 from rbac_providers_auth_manager.config_runtime.models import (
     AuthConfig,
     AuthConfigValidation,
@@ -31,6 +32,11 @@ from rbac_providers_auth_manager.config_runtime.models import (
 )
 
 ROLE_ORDER: Final[tuple[str, ...]] = ("Viewer", "User", "Op", "Admin")
+OFFICIAL_CONSTANT_MODULES: Final[tuple[str, ...]] = (
+    "airflow.providers.fab.www.security.permissions",
+    "airflow.providers.fab.auth_manager.security_manager.override",
+    "airflow.security.permissions",
+)
 EXCLUDED_DB_BACKED_RESOURCES: Final[frozenset[str]] = frozenset(
     {
         "Action",
@@ -86,6 +92,14 @@ class SupportReport:
     supported_official_permissions_by_role: dict[str, tuple[dict[str, str], ...]]
     unsupported_official_permissions_by_role: dict[str, tuple[dict[str, str], ...]]
     plugin_extra_permissions_by_role: dict[str, tuple[dict[str, str], ...]]
+    official_action_constants: tuple[str, ...]
+    official_resource_constants: tuple[str, ...]
+    plugin_action_constants: tuple[str, ...]
+    plugin_resource_constants: tuple[str, ...]
+    missing_action_constants_in_plugin: tuple[str, ...]
+    extra_action_constants_in_plugin: tuple[str, ...]
+    missing_resource_constants_in_plugin: tuple[str, ...]
+    extra_resource_constants_in_plugin: tuple[str, ...]
     contract_advisories: tuple[dict[str, str], ...]
     compatibility_matrix: tuple[dict[str, object], ...]
     unsupported_permissions: tuple[SupportGap, ...]
@@ -118,6 +132,22 @@ class SupportReport:
                 key: list(value)
                 for key, value in self.plugin_extra_permissions_by_role.items()
             },
+            "official_action_constants": list(self.official_action_constants),
+            "official_resource_constants": list(self.official_resource_constants),
+            "plugin_action_constants": list(self.plugin_action_constants),
+            "plugin_resource_constants": list(self.plugin_resource_constants),
+            "missing_action_constants_in_plugin": list(
+                self.missing_action_constants_in_plugin
+            ),
+            "extra_action_constants_in_plugin": list(
+                self.extra_action_constants_in_plugin
+            ),
+            "missing_resource_constants_in_plugin": list(
+                self.missing_resource_constants_in_plugin
+            ),
+            "extra_resource_constants_in_plugin": list(
+                self.extra_resource_constants_in_plugin
+            ),
             "contract_advisories": list(self.contract_advisories),
             "compatibility_matrix": list(self.compatibility_matrix),
             "unsupported_permissions": [
@@ -244,11 +274,47 @@ def _build_synthetic_config(
     )
 
 
+def _collect_official_constants() -> tuple[tuple[str, ...], tuple[str, ...]]:
+    actions: set[str] = set()
+    resources: set[str] = set()
+    for module_name in OFFICIAL_CONSTANT_MODULES:
+        module = importlib.import_module(module_name)
+        for name, value in vars(module).items():
+            if not isinstance(value, str):
+                continue
+            if name.startswith("ACTION_"):
+                actions.add(vocab.normalize_action(value))
+            elif name.startswith("RESOURCE_") and not name.endswith("_PREFIX"):
+                normalized = vocab.normalize_resource(value)
+                if not _is_db_backed_resource(normalized):
+                    resources.add(normalized)
+    return tuple(sorted(actions)), tuple(sorted(resources))
+
+
+def _table(
+    lines: list[str], headers: tuple[str, ...], rows: list[tuple[str, ...]]
+) -> None:
+    lines.append("| " + " | ".join(headers) + " |")
+    lines.append("| " + " | ".join("---" for _ in headers) + " |")
+    if rows:
+        for row in rows:
+            lines.append("| " + " | ".join(row) + " |")
+    else:
+        lines.append("| " + " | ".join("-" for _ in headers) + " |")
+
+
+def _permission_rows(items: tuple[dict[str, str], ...]) -> list[tuple[str, str]]:
+    return [(item["action"], item["resource"]) for item in items]
+
+
 def build_support_report() -> SupportReport:
     official = _filtered_official_permissions(provider_role_permissions())
     synthetic_cfg = _build_synthetic_config(official)
     policy = RbacPolicy(synthetic_cfg)
     plugin_contract = _plugin_contract_permissions()
+    official_actions, official_resources = _collect_official_constants()
+    plugin_actions = tuple(sorted(SUPPORTED_ACTIONS))
+    plugin_resources = tuple(sorted(SUPPORTED_RESOURCES))
 
     unsupported: list[SupportGap] = []
     official_counts: dict[str, int] = {}
@@ -345,10 +411,150 @@ def build_support_report() -> SupportReport:
         supported_official_permissions_by_role=supported_by_role,
         unsupported_official_permissions_by_role=unsupported_by_role,
         plugin_extra_permissions_by_role=extra_by_role,
+        official_action_constants=official_actions,
+        official_resource_constants=official_resources,
+        plugin_action_constants=plugin_actions,
+        plugin_resource_constants=plugin_resources,
+        missing_action_constants_in_plugin=tuple(
+            sorted(set(official_actions) - set(plugin_actions))
+        ),
+        extra_action_constants_in_plugin=tuple(
+            sorted(set(plugin_actions) - set(official_actions))
+        ),
+        missing_resource_constants_in_plugin=tuple(
+            sorted(set(official_resources) - set(plugin_resources))
+        ),
+        extra_resource_constants_in_plugin=tuple(
+            sorted(set(plugin_resources) - set(official_resources))
+        ),
         contract_advisories=advisories,
         compatibility_matrix=matrix,
         unsupported_permissions=tuple(unsupported),
     )
+
+
+def render_support_markdown(report: SupportReport) -> str:
+    airflow_mod = importlib.import_module("airflow")
+    metadata_mod = importlib.import_module("importlib.metadata")
+
+    lines = ["# FAB provider support validation", ""]
+    lines.append(
+        "This report validates whether the custom plugin design supports the latest official non-DB FAB permission surface."
+    )
+    lines.extend(["", "## CI setup", ""])
+    _table(
+        lines,
+        ("Field", "Value"),
+        [
+            ("Python", platform.python_version()),
+            ("Airflow", airflow_mod.__version__),
+            (
+                "FAB provider",
+                metadata_mod.version("apache-airflow-providers-fab"),
+            ),
+        ],
+    )
+
+    lines.extend(["", "## Deduped action constants", ""])
+    _table(
+        lines,
+        ("Official FAB / Airflow", "Custom plugin", "Status"),
+        [
+            (
+                ", ".join(report.official_action_constants) or "-",
+                ", ".join(report.plugin_action_constants) or "-",
+                "MATCH" if not report.missing_action_constants_in_plugin else "DIFF",
+            )
+        ],
+    )
+    lines.extend(["", "## Deduped resource constants", ""])
+    _table(
+        lines,
+        ("Official FAB / Airflow", "Custom plugin", "Status"),
+        [
+            (
+                ", ".join(report.official_resource_constants) or "-",
+                ", ".join(report.plugin_resource_constants) or "-",
+                "MATCH" if not report.missing_resource_constants_in_plugin else "DIFF",
+            )
+        ],
+    )
+    lines.extend(["", "## Constant differences", ""])
+    _table(
+        lines,
+        ("Type", "Missing in plugin", "Additional in plugin"),
+        [
+            (
+                "Actions",
+                ", ".join(report.missing_action_constants_in_plugin) or "-",
+                ", ".join(report.extra_action_constants_in_plugin) or "-",
+            ),
+            (
+                "Resources",
+                ", ".join(report.missing_resource_constants_in_plugin) or "-",
+                ", ".join(report.extra_resource_constants_in_plugin) or "-",
+            ),
+        ],
+    )
+    lines.extend(["", "## Role support summary", ""])
+    _table(
+        lines,
+        ("Role", "Official count", "Plugin-supported count", "Missing", "Additional"),
+        [
+            (
+                role,
+                str(report.official_permission_counts.get(role, 0)),
+                str(report.supported_permission_counts.get(role, 0)),
+                str(len(report.unsupported_official_permissions_by_role[role])),
+                str(len(report.plugin_extra_permissions_by_role[role])),
+            )
+            for role in ROLE_ORDER
+        ],
+    )
+
+    for role in ROLE_ORDER:
+        lines.extend(["", f"## {role}", ""])
+        lines.append("### Official FAB permissions")
+        lines.append("")
+        _table(
+            lines,
+            ("Action", "Resource"),
+            _permission_rows(report.official_permissions_by_role[role]),
+        )
+        lines.extend(["", "### Plugin contract permissions", ""])
+        _table(
+            lines,
+            ("Action", "Resource"),
+            _permission_rows(report.plugin_contract_permissions_by_role[role]),
+        )
+        lines.extend(["", "### Differences", ""])
+        diff_rows = [
+            ("missing in plugin support", item["action"], item["resource"])
+            for item in report.unsupported_official_permissions_by_role[role]
+        ] + [
+            ("additional in plugin support", item["action"], item["resource"])
+            for item in report.plugin_extra_permissions_by_role[role]
+        ]
+        _table(lines, ("Type", "Action", "Resource"), diff_rows)
+
+    lines.extend(["", "## Contract advisories", ""])
+    if report.contract_advisories:
+        _table(
+            lines,
+            ("Role", "Resource", "Issue", "Severity"),
+            [
+                (
+                    str(item.get("role", "-")),
+                    str(item.get("resource", "-")),
+                    str(item.get("issue", "-")),
+                    str(item.get("severity", "-")),
+                )
+                for item in report.contract_advisories
+            ],
+        )
+    else:
+        _table(lines, ("Role", "Resource", "Issue", "Severity"), [])
+    return "\n".join(lines) + "\n"
 
 
 def write_support_artifacts(*, artifact_dir: Path) -> SupportReport:
@@ -359,78 +565,9 @@ def write_support_artifacts(*, artifact_dir: Path) -> SupportReport:
         json.dumps(payload, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
-    (artifact_dir / "official-fab-permissions.json").write_text(
-        json.dumps(payload["official_permissions_by_role"], indent=2, sort_keys=True)
-        + "\n",
-        encoding="utf-8",
-    )
-    (artifact_dir / "plugin-contract-permissions.json").write_text(
-        json.dumps(
-            payload["plugin_contract_permissions_by_role"], indent=2, sort_keys=True
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-    (artifact_dir / "plugin-vs-official-diff.json").write_text(
-        json.dumps(
-            {
-                "unsupported_official_permissions_by_role": payload[
-                    "unsupported_official_permissions_by_role"
-                ],
-                "plugin_extra_permissions_by_role": payload[
-                    "plugin_extra_permissions_by_role"
-                ],
-            },
-            indent=2,
-            sort_keys=True,
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-
-    summary_lines = ["# FAB provider support validation", ""]
-    summary_lines.append(
-        "This job validates whether the custom plugin design supports the official non-DB FAB permission surface."
-    )
-    summary_lines.append("")
-    for role_name in ROLE_ORDER:
-        unsupported = report.unsupported_official_permissions_by_role[role_name]
-        extra = report.plugin_extra_permissions_by_role[role_name]
-        summary_lines.append(f"## {role_name}")
-        summary_lines.append(
-            f"- official permissions: {report.official_permission_counts.get(role_name, 0)}"
-        )
-        summary_lines.append(
-            f"- supported by plugin design: {report.supported_permission_counts.get(role_name, 0)}"
-        )
-        summary_lines.append(
-            f"- missing official permissions in plugin support: {len(unsupported)}"
-        )
-        summary_lines.append(
-            f"- additional plugin-defined permissions vs official model: {len(extra)}"
-        )
-        if unsupported:
-            summary_lines.append("- missing list:")
-            for item in unsupported:
-                summary_lines.append(f"  - {item['action']} / {item['resource']}")
-        if extra:
-            summary_lines.append("- additional list:")
-            for item in extra:
-                summary_lines.append(f"  - {item['action']} / {item['resource']}")
-        summary_lines.append("")
-
-    summary_lines.append(
-        f"- unsupported official permissions total: {len(report.unsupported_permissions)}"
-    )
-    summary_lines.append(f"- contract advisories: {len(report.contract_advisories)}")
-    summary_lines.append("")
-    summary_lines.append("Artifacts:")
-    summary_lines.append("- official-fab-permissions.json")
-    summary_lines.append("- plugin-contract-permissions.json")
-    summary_lines.append("- plugin-vs-official-diff.json")
-    summary_lines.append("- fab-support-report.json")
+    markdown = render_support_markdown(report)
     (artifact_dir / "official-fab-permissions-support-summary.md").write_text(
-        "\n".join(summary_lines) + "\n",
+        markdown,
         encoding="utf-8",
     )
     return report
