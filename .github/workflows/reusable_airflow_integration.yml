@@ -299,9 +299,11 @@ jobs:
       - name: Build airflow integration artifact summary
         if: always()
         run: |
-          python scripts/ci/render_ci_scope_summary.py             --title "airflow integration scope"             --suite airflow_integration             --output "$AIRFLOW_CI_ARTIFACTS/airflow-scope.md"
+          python scripts/ci/render_ci_scope_summary.py \
+            --title "airflow integration scope"             --suite airflow_integration             --output "$AIRFLOW_CI_ARTIFACTS/airflow-scope.md"
           cat "$AIRFLOW_CI_ARTIFACTS/airflow-scope.md" >> "$GITHUB_STEP_SUMMARY"
-          python scripts/ci/summarize_ci_artifacts.py             --artifact-dir $AIRFLOW_CI_ARTIFACTS             --lane-name "airflow integration"             --output-md $AIRFLOW_CI_ARTIFACTS/artifact-summary.md             --output-json $AIRFLOW_CI_ARTIFACTS/artifact-summary.json
+          python scripts/ci/summarize_ci_artifacts.py \
+            --artifact-dir $AIRFLOW_CI_ARTIFACTS             --lane-name "airflow integration"             --output-md "$AIRFLOW_CI_ARTIFACTS/artifact-summary.md"
           cat $AIRFLOW_CI_ARTIFACTS/artifact-summary.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload Airflow integration artifacts

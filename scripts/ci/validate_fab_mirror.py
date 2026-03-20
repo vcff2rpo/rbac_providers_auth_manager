@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import argparse
-import json
 from pathlib import Path
 
 from rbac_providers_auth_manager.compatibility.fab_provider_support import (
+    render_support_markdown,
     write_support_artifacts,
 )
 
@@ -22,7 +22,7 @@ def main() -> None:
 
     artifact_dir = Path(args.artifact_dir)
     report = write_support_artifacts(artifact_dir=artifact_dir)
-    print(json.dumps(report.as_dict(), indent=2, sort_keys=True))
+    print(render_support_markdown(report), end="")
     if report.has_blocking_gaps:
         raise SystemExit(
             "Official FAB provider permissions are not fully supported by the custom plugin design"

@@ -124,9 +124,11 @@ jobs:
       - name: Build external validation artifact summary
         if: always()
         run: |
-          python scripts/ci/render_ci_scope_summary.py             --title "external real validation scope"             --suite external_real_validation             --output "$EXTERNAL_ARTIFACT_DIR/external-real-scope.md"
+          python scripts/ci/render_ci_scope_summary.py \
+            --title "external real validation scope"             --suite external_real_validation             --output "$EXTERNAL_ARTIFACT_DIR/external-real-scope.md"
           cat "$EXTERNAL_ARTIFACT_DIR/external-real-scope.md" >> "$GITHUB_STEP_SUMMARY"
-          python scripts/ci/summarize_ci_artifacts.py             --artifact-dir "$EXTERNAL_ARTIFACT_DIR"             --lane-name "external real validation"             --output-md "$EXTERNAL_ARTIFACT_DIR/artifact-summary.md"             --output-json "$EXTERNAL_ARTIFACT_DIR/artifact-summary.json"
+          python scripts/ci/summarize_ci_artifacts.py \
+            --artifact-dir "$EXTERNAL_ARTIFACT_DIR"             --lane-name "external real validation"             --output-md "$EXTERNAL_ARTIFACT_DIR/artifact-summary.md"
           cat "$EXTERNAL_ARTIFACT_DIR/artifact-summary.md" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Stop API server

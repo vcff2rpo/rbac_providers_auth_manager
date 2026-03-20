@@ -154,7 +154,9 @@ jobs:
             tests/ci/*.py
       - run: python -m pip install --upgrade pip setuptools wheel
       - run: python -m pip install -r requirements-dev.txt
-      - run: python -m mypy tests/ci scripts/ci
+      - name: Resolve quality mypy inventory
+        run: echo "QUALITY_TEST_FILES=$(python scripts/ci/list_contract_tests.py --suite quality)" >> "$GITHUB_ENV"
+      - run: python -m mypy $QUALITY_TEST_FILES scripts/ci
 
   pytest_family_coverage:
     name: pytest family coverage (${{ matrix.family }}, Python 3.13)
@@ -303,10 +305,9 @@ jobs:
             --output "$QUALITY_ARTIFACT_DIR/quality-suite-scope.md"
           cat "$QUALITY_ARTIFACT_DIR/quality-suite-scope.md" >> "$GITHUB_STEP_SUMMARY"
           python scripts/ci/summarize_ci_artifacts.py \
-            --artifact-dir $QUALITY_ARTIFACT_DIR \
+            --artifact-dir "$QUALITY_ARTIFACT_DIR" \
             --lane-name "quality suite" \
-            --output-md $QUALITY_ARTIFACT_DIR/artifact-summary.md \
-            --output-json $QUALITY_ARTIFACT_DIR/artifact-summary.json
+            --output-md "$QUALITY_ARTIFACT_DIR/artifact-summary.md"
           cat $QUALITY_ARTIFACT_DIR/artifact-summary.md >> "$GITHUB_STEP_SUMMARY"
       - if: always()
         uses: actions/upload-artifact@v4
@@ -314,7 +315,6 @@ jobs:
           name: quality-suite-summary
           path: |
             ${{ env.QUALITY_ARTIFACT_DIR }}/artifact-summary.md
-            ${{ env.QUALITY_ARTIFACT_DIR }}/artifact-summary.json
             ${{ env.QUALITY_ARTIFACT_DIR }}/quality-suite-scope.md
             ${{ env.QUALITY_ARTIFACT_DIR }}/pip-audit.log
 

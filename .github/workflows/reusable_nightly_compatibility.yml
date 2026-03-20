@@ -101,6 +101,23 @@ jobs:
             --junitxml="$NIGHTLY_ARTIFACT_DIR/pytest-fab-matrix.xml" \
             tests/ci/test_fab_provider_mirror_latest.py 2>&1 | tee "$NIGHTLY_ARTIFACT_DIR/pytest-fab-matrix.log"
 
+      - name: Publish nightly compatibility summary
+        if: always()
+        run: |
+          python scripts/ci/render_ci_scope_summary.py \
+            --title "nightly compatibility scope"             --suite fab_provider_validation             --output "$NIGHTLY_ARTIFACT_DIR/nightly-scope.md"
+          cat "$NIGHTLY_ARTIFACT_DIR/nightly-scope.md" >> "$GITHUB_STEP_SUMMARY"
+          if [ -f "$NIGHTLY_ARTIFACT_DIR/official-fab-permissions-support-summary.md" ]; then
+            cat "$NIGHTLY_ARTIFACT_DIR/official-fab-permissions-support-summary.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Build nightly compatibility artifact summary
+        if: always()
+        run: |
+          python scripts/ci/summarize_ci_artifacts.py \
+            --artifact-dir "$NIGHTLY_ARTIFACT_DIR"             --lane-name "nightly compatibility"             --output-md "$NIGHTLY_ARTIFACT_DIR/artifact-summary.md"
+          cat "$NIGHTLY_ARTIFACT_DIR/artifact-summary.md" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Upload compatibility artifacts
         if: always()
         uses: actions/upload-artifact@v4

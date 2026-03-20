@@ -100,7 +100,8 @@ jobs:
       - name: Publish FAB provider permission comparison summary
         if: always()
         run: |
-          python scripts/ci/render_ci_scope_summary.py             --title "fab provider validation scope"             --suite fab_provider_validation             --output "$FAB_ARTIFACT_DIR/fab-provider-scope.md"
+          python scripts/ci/render_ci_scope_summary.py \
+            --title "fab provider validation scope"             --suite fab_provider_validation             --output "$FAB_ARTIFACT_DIR/fab-provider-scope.md"
           cat "$FAB_ARTIFACT_DIR/fab-provider-scope.md" >> "$GITHUB_STEP_SUMMARY"
           if [ -f "$FAB_ARTIFACT_DIR/official-fab-permissions-support-summary.md" ]; then
             cat "$FAB_ARTIFACT_DIR/official-fab-permissions-support-summary.md" >> "$GITHUB_STEP_SUMMARY"
@@ -109,5 +110,6 @@ jobs:
       - name: Build fab provider validation artifact summary
         if: always()
         run: |
-          python scripts/ci/summarize_ci_artifacts.py             --artifact-dir $FAB_ARTIFACT_DIR             --lane-name "fab provider validation"             --output-md $FAB_ARTIFACT_DIR/artifact-summary.md             --output-json $FAB_ARTIFACT_DIR/artifact-summary.json
+          python scripts/ci/summarize_ci_artifacts.py \
+            --artifact-dir $FAB_ARTIFACT_DIR             --lane-name "fab provider validation"             --output-md "$FAB_ARTIFACT_DIR/artifact-summary.md"
           cat $FAB_ARTIFACT_DIR/artifact-summary.md >> "$GITHUB_STEP_SUMMARY"

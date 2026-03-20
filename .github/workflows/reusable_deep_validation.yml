@@ -91,8 +91,7 @@ jobs:
           python scripts/ci/summarize_ci_artifacts.py \
             --artifact-dir "$DEEP_ARTIFACT_DIR" \
             --lane-name "deep validation" \
-            --output-md "$DEEP_ARTIFACT_DIR/artifact-summary.md" \
-            --output-json "$DEEP_ARTIFACT_DIR/artifact-summary.json"
+            --output-md "$DEEP_ARTIFACT_DIR/artifact-summary.md"
           cat "$DEEP_ARTIFACT_DIR/artifact-summary.md" >> "$GITHUB_STEP_SUMMARY"
       - if: always()
         uses: actions/upload-artifact@v4
@@ -102,7 +101,6 @@ jobs:
             ${{ env.DEEP_ARTIFACT_DIR }}/import-smoke.log
             ${{ env.DEEP_ARTIFACT_DIR }}/import-smoke.xml
             ${{ env.DEEP_ARTIFACT_DIR }}/artifact-summary.md
-            ${{ env.DEEP_ARTIFACT_DIR }}/artifact-summary.json
             ${{ env.DEEP_ARTIFACT_DIR }}/bootstrap-imports-scope.md
 
   unit-and-mock-tests:
@@ -137,7 +135,8 @@ jobs:
         run: |
           mkdir -p "$DEEP_ARTIFACT_DIR"
           echo "TEST_FILES=$(python scripts/ci/list_contract_tests.py --group '${{ matrix.group-name }}')" >> "$GITHUB_ENV"
-          python scripts/ci/render_ci_scope_summary.py             --title "deep validation shard: ${{ matrix.group-name }}"             --group "${{ matrix.group-name }}"             --output "$DEEP_ARTIFACT_DIR/${{ matrix.group-name }}-scope-${{ matrix.python-version }}.md"
+          python scripts/ci/render_ci_scope_summary.py \
+            --title "deep validation shard: ${{ matrix.group-name }}"             --group "${{ matrix.group-name }}"             --output "$DEEP_ARTIFACT_DIR/${{ matrix.group-name }}-scope-${{ matrix.python-version }}.md"
           cat "$DEEP_ARTIFACT_DIR/${{ matrix.group-name }}-scope-${{ matrix.python-version }}.md" >> "$GITHUB_STEP_SUMMARY"
       - name: Run shard with coverage
         run: |

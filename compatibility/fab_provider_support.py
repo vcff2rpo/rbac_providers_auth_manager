@@ -5,7 +5,7 @@ import json
 import platform
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Final
+from typing import Final, Sequence
 
 from rbac_providers_auth_manager.authorization import vocabulary as vocab
 from rbac_providers_auth_manager.authorization.compat_matrix import (
@@ -292,7 +292,7 @@ def _collect_official_constants() -> tuple[tuple[str, ...], tuple[str, ...]]:
 
 
 def _table(
-    lines: list[str], headers: tuple[str, ...], rows: list[tuple[str, ...]]
+    lines: list[str], headers: Sequence[str], rows: Sequence[Sequence[str]]
 ) -> None:
     lines.append("| " + " | ".join(headers) + " |")
     lines.append("| " + " | ".join("---" for _ in headers) + " |")
@@ -305,6 +305,10 @@ def _table(
 
 def _permission_rows(items: tuple[dict[str, str], ...]) -> list[tuple[str, str]]:
     return [(item["action"], item["resource"]) for item in items]
+
+
+def _constant_rows(items: Sequence[str]) -> list[tuple[str]]:
+    return [(item,) for item in items]
 
 
 def build_support_report() -> SupportReport:
@@ -448,49 +452,41 @@ def render_support_markdown(report: SupportReport) -> str:
         [
             ("Python", platform.python_version()),
             ("Airflow", airflow_mod.__version__),
-            (
-                "FAB provider",
-                metadata_mod.version("apache-airflow-providers-fab"),
-            ),
+            ("FAB provider", metadata_mod.version("apache-airflow-providers-fab")),
+            ("Official constant sources", ", ".join(OFFICIAL_CONSTANT_MODULES)),
         ],
     )
 
-    lines.extend(["", "## Deduped action constants", ""])
+    lines.extend(["", "## Official FAB / Airflow action constants", ""])
     _table(
-        lines,
-        ("Official FAB / Airflow", "Custom plugin", "Status"),
-        [
-            (
-                ", ".join(report.official_action_constants) or "-",
-                ", ".join(report.plugin_action_constants) or "-",
-                "MATCH" if not report.missing_action_constants_in_plugin else "DIFF",
-            )
-        ],
+        lines, ("Action constant",), _constant_rows(report.official_action_constants)
     )
-    lines.extend(["", "## Deduped resource constants", ""])
+    lines.extend(["", "## Custom plugin action constants", ""])
+    _table(lines, ("Action constant",), _constant_rows(report.plugin_action_constants))
+    lines.extend(["", "## Official FAB / Airflow resource constants", ""])
     _table(
         lines,
-        ("Official FAB / Airflow", "Custom plugin", "Status"),
-        [
-            (
-                ", ".join(report.official_resource_constants) or "-",
-                ", ".join(report.plugin_resource_constants) or "-",
-                "MATCH" if not report.missing_resource_constants_in_plugin else "DIFF",
-            )
-        ],
+        ("Resource constant",),
+        _constant_rows(report.official_resource_constants),
+    )
+    lines.extend(["", "## Custom plugin resource constants", ""])
+    _table(
+        lines, ("Resource constant",), _constant_rows(report.plugin_resource_constants)
     )
     lines.extend(["", "## Constant differences", ""])
     _table(
         lines,
-        ("Type", "Missing in plugin", "Additional in plugin"),
+        ("Type", "Match", "Missing in plugin", "Additional in plugin"),
         [
             (
                 "Actions",
+                "yes" if not report.missing_action_constants_in_plugin else "no",
                 ", ".join(report.missing_action_constants_in_plugin) or "-",
                 ", ".join(report.extra_action_constants_in_plugin) or "-",
             ),
             (
                 "Resources",
+                "yes" if not report.missing_resource_constants_in_plugin else "no",
                 ", ".join(report.missing_resource_constants_in_plugin) or "-",
                 ", ".join(report.extra_resource_constants_in_plugin) or "-",
             ),
@@ -528,7 +524,7 @@ def render_support_markdown(report: SupportReport) -> str:
             _permission_rows(report.plugin_contract_permissions_by_role[role]),
         )
         lines.extend(["", "### Differences", ""])
-        diff_rows = [
+        diff_rows: list[tuple[str, str, str]] = [
             ("missing in plugin support", item["action"], item["resource"])
             for item in report.unsupported_official_permissions_by_role[role]
         ] + [
@@ -554,6 +550,17 @@ def render_support_markdown(report: SupportReport) -> str:
         )
     else:
         _table(lines, ("Role", "Resource", "Issue", "Severity"), [])
+
+    lines.extend(["", "## Result interpretation", ""])
+    lines.append(
+        "- match: plugin vocabulary or contract includes the official action/resource"
+    )
+    lines.append(
+        "- missing in plugin: official FAB requirement not supported by the plugin contract"
+    )
+    lines.append(
+        "- additional in plugin: plugin defines support beyond the official FAB surface"
+    )
     return "\n".join(lines) + "\n"
 
 
