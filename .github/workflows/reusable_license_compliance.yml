@@ -1,0 +1,184 @@
+name: reusable license compliance
+
+on:
+  workflow_call:
+    inputs:
+      package-name:
+        description: Python package name
+        required: false
+        type: string
+        default: rbac_providers_auth_manager
+      python-version:
+        description: Python version for compliance tooling
+        required: false
+        type: string
+        default: "3.13"
+
+permissions:
+  contents: read
+
+jobs:
+  requirements_usage:
+    name: requirements usage
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ inputs.python-version }}
+      - name: Report requirements file usage
+        run: |
+          set -o pipefail
+          mkdir -p .ci-artifacts/license
+          python scripts/ci/report_requirements_usage.py \
+            --repo-root . \
+            --output-md .ci-artifacts/license/requirements-usage.md \
+            --output-json .ci-artifacts/license/requirements-usage.json \
+            2>&1 | tee .ci-artifacts/license/requirements-usage.log
+      - name: Upload requirements usage artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: requirements-usage
+          path: .ci-artifacts/license
+
+  license_compliance:
+    name: license compliance
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: requirements_usage
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ inputs.python-version }}
+      - name: Install license tooling
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install pip-licenses==5.0.0 reuse==5.0.2
+      - name: Run license compliance scan
+        run: |
+          set -o pipefail
+          mkdir -p .ci-artifacts/license
+          python scripts/ci/check_license_compliance.py \
+            --repo-root . \
+            --output-md .ci-artifacts/license/license-compliance.md \
+            --output-json .ci-artifacts/license/license-compliance.json \
+            2>&1 | tee .ci-artifacts/license/license-compliance.log
+      - name: Upload license artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: license-compliance
+          path: .ci-artifacts/license
+
+  sbom:
+    name: sbom
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ inputs.python-version }}
+      - name: Install SBOM tooling
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install cyclonedx-bom==4.1.0
+      - name: Generate SBOM
+        run: |
+          set -o pipefail
+          mkdir -p .ci-artifacts/license
+          cyclonedx-py environment --of JSON --output-file .ci-artifacts/license/sbom.json
+          cyclonedx-py environment --of XML --output-file .ci-artifacts/license/sbom.xml
+          python scripts/ci/summarize_sbom.py \
+            --sbom-json .ci-artifacts/license/sbom.json \
+            --output-md .ci-artifacts/license/sbom-summary.md \
+            2>&1 | tee .ci-artifacts/license/sbom.log
+      - name: Upload SBOM artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: .ci-artifacts/license
+
+  static_security:
+    name: static security
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ inputs.python-version }}
+      - name: Install static security tooling
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install bandit[toml]==1.8.6 gitleaks==0.0
+        continue-on-error: true
+      - name: Install Bandit and Gitleaks via binaries
+        run: |
+          python -m pip install bandit[toml]==1.8.6
+          curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.24.2/gitleaks_8.24.2_linux_x64.tar.gz -o /tmp/gitleaks.tar.gz
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp
+          sudo mv /tmp/gitleaks /usr/local/bin/gitleaks
+      - name: Run Bandit
+        run: |
+          set -o pipefail
+          mkdir -p .ci-artifacts/license
+          python -m bandit -q -r . -x tests,.ci-artifacts,ci_review -f txt -o .ci-artifacts/license/bandit.txt || true
+      - name: Run Gitleaks
+        run: |
+          set -o pipefail
+          gitleaks detect --source . --config .gitleaks.toml --report-path .ci-artifacts/license/gitleaks.json --no-banner || true
+      - name: Render static security summary
+        run: |
+          {
+            echo "# Static security summary"
+            echo
+            echo "- Bandit: see bandit.txt"
+            echo "- Gitleaks: see gitleaks.json"
+          } > .ci-artifacts/license/static-security.md
+      - name: Upload static security artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: static-security
+          path: .ci-artifacts/license
+
+  summary:
+    name: license compliance summary
+    runs-on: ubuntu-latest
+    if: always()
+    needs:
+      - requirements_usage
+      - license_compliance
+      - sbom
+      - static_security
+    steps:
+      - name: Print lane result summary
+        run: |
+          {
+            echo "# License compliance lane"
+            echo
+            echo "| Job | Result |"
+            echo "|---|---|"
+            echo "| requirements_usage | ${{ needs.requirements_usage.result }} |"
+            echo "| license_compliance | ${{ needs.license_compliance.result }} |"
+            echo "| sbom | ${{ needs.sbom.result }} |"
+            echo "| static_security | ${{ needs.static_security.result }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          for result in "${{ needs.requirements_usage.result }}" "${{ needs.license_compliance.result }}" "${{ needs.sbom.result }}" "${{ needs.static_security.result }}"; do
+            if [ "$result" != "success" ]; then
+              exit 1
+            fi
+          done

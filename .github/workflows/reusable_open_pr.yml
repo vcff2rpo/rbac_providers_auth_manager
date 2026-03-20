@@ -14,6 +14,7 @@ on:
       fab_provider_result: {type: string, required: false, default: unknown}
       nightly_compatibility_result: {type: string, required: false, default: unknown}
       external_real_validation_result: {type: string, required: false, default: unknown}
+      license_compliance_result: {type: string, required: false, default: unknown}
       run_url: {type: string, required: false, default: ''}
       source_sha: {type: string, required: false, default: ''}
 
@@ -93,6 +94,7 @@ jobs:
               `- fab-provider-validation: ${{ inputs.fab_provider_result }}`,
               `- nightly-compatibility: ${{ inputs.nightly_compatibility_result }}`,
               `- external-real-validation: ${{ inputs.external_real_validation_result }}`,
+              `- license-compliance: ${{ inputs.license_compliance_result }}`,
             ].join('\n');
             if (existing.length > 0) {
               await github.rest.pulls.update({ owner, repo, pull_number: existing[0].number, title, body, base });

@@ -136,3 +136,7 @@ config_runtime/*.key
 # Local debug outputs
 tests/output/
 tests/tmp/
+.ci-artifacts/
+ci_review/
+*.sbom.json
+*.sbom.xml

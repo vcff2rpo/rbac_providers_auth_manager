@@ -83,6 +83,14 @@ on:
         required: false
         type: string
         default: skipped
+      license-compliance-enabled:
+        required: false
+        type: boolean
+        default: false
+      license-compliance-result:
+        required: false
+        type: string
+        default: skipped
       run-url:
         required: false
         type: string
@@ -117,6 +125,7 @@ jobs:
           if [ "${{ inputs.fab-provider-enabled }}" = "true" ] && [ "${{ inputs.fab-provider-suite-result }}" != "success" ]; then SHOULD_OPEN_PR=false; REASONS+=("fab_provider=${{ inputs.fab-provider-result }}"); fi
           if [ "${{ inputs.nightly-compatibility-enabled }}" = "true" ] && [ "${{ inputs.nightly-compatibility-result }}" != "success" ]; then SHOULD_OPEN_PR=false; REASONS+=("nightly_compatibility=${{ inputs.nightly-compatibility-result }}"); fi
           if [ "${{ inputs.external-real-validation-enabled }}" = "true" ] && [ "${{ inputs.external-real-validation-result }}" != "success" ]; then SHOULD_OPEN_PR=false; REASONS+=("external_real_validation=${{ inputs.external-real-validation-result }}"); fi
+          if [ "${{ inputs.license-compliance-enabled }}" = "true" ] && [ "${{ inputs.license-compliance-result }}" != "success" ]; then SHOULD_OPEN_PR=false; REASONS+=("license_compliance=${{ inputs.license-compliance-result }}"); fi
 
           if [ "$SHOULD_OPEN_PR" = true ]; then GATE_REASON=all_enabled_gates_passed; else GATE_REASON="$(IFS=';'; echo "${REASONS[*]}")"; fi
           echo "should_open_pr=$SHOULD_OPEN_PR" >> "$GITHUB_OUTPUT"
@@ -142,5 +151,6 @@ jobs:
       fab_provider_result: ${{ inputs.fab-provider-enabled && inputs.fab-provider-result || 'skipped' }}
       nightly_compatibility_result: ${{ inputs.nightly-compatibility-enabled && inputs.nightly-compatibility-result || 'skipped' }}
       external_real_validation_result: ${{ inputs.external-real-validation-enabled && inputs.external-real-validation-result || 'skipped' }}
+      license_compliance_result: ${{ inputs.license-compliance-enabled && inputs.license-compliance-result || 'skipped' }}
       run_url: ${{ inputs.run-url }}
       source_sha: ${{ inputs.source-sha }}
