@@ -275,7 +275,9 @@ jobs:
             wait "$API_PID" >/dev/null 2>&1 || true
           fi
           echo "==> final api-server log tail"
-          tail -n 200 "$AIRFLOW_CI_ARTIFACTS/api-server.log" || true
+          if [ -f "$AIRFLOW_CI_ARTIFACTS/api-server.log" ]; then
+            tail -n 200 "$AIRFLOW_CI_ARTIFACTS/api-server.log" || true
+          fi
           {
             echo "# Airflow integration summary"
             echo ""

@@ -61,11 +61,15 @@ jobs:
         run: |
           echo "AIRFLOW_CONSTRAINTS_URL=https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-${{ inputs.python-version }}.txt" >> "$GITHUB_ENV"
 
-      - name: Install Airflow core and official FAB provider with constraints
+      - name: Install Airflow core with constraints
         run: |
           python -m pip install "apache-airflow==${AIRFLOW_VERSION}" --constraint "${AIRFLOW_CONSTRAINTS_URL}"
-          python -m pip install "apache-airflow-providers-fab==${FAB_PROVIDER_VERSION}" --constraint "${AIRFLOW_CONSTRAINTS_URL}"
+
+      - name: Install official FAB provider after Airflow installation
+        run: |
+          python -m pip install "apache-airflow-providers-fab==${FAB_PROVIDER_VERSION}"
           python -m pip install -r requirements-fab-provider-validation.txt
+          python -m pip check
 
       - name: Capture Airflow and FAB provider versions
         run: |

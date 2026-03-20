@@ -70,8 +70,9 @@ jobs:
       - name: Install compatibility matrix dependencies
         run: |
           python -m pip install "apache-airflow==${AIRFLOW_VERSION}" --constraint "${AIRFLOW_CONSTRAINTS_URL}"
-          python -m pip install "apache-airflow-providers-fab==${FAB_PROVIDER_VERSION}" --constraint "${AIRFLOW_CONSTRAINTS_URL}"
+          python -m pip install "apache-airflow-providers-fab==${FAB_PROVIDER_VERSION}"
           python -m pip install -r requirements-fab-provider-validation.txt
+          python -m pip check
 
       - name: Create compatibility artifact directory
         run: mkdir -p "$NIGHTLY_ARTIFACT_DIR"

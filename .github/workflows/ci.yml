@@ -83,12 +83,13 @@ jobs:
 
   fab_provider_validation:
     if: ${{ inputs.run_fab_provider_validation }}
-    uses: ./.github/workflows/reusable_fab_provider_validation.yml
+    uses: ./.github/workflows/reusable_fab_provider_suite.yml
     with:
       package-name: rbac_providers_auth_manager
       airflow-version: "3.1.8"
       fab-provider-version: "3.5.0"
-      python-version: "3.13"
+      py312-version: "3.12"
+      py313-version: "3.13"
 
   nightly_compatibility:
     if: ${{ inputs.run_nightly_compatibility }}
@@ -139,7 +140,8 @@ jobs:
       idp-enabled: ${{ inputs.run_idp_integration }}
       idp-result: ${{ inputs.run_idp_integration && needs.identity_provider_integration.result || 'skipped' }}
       fab-provider-enabled: ${{ inputs.run_fab_provider_validation }}
-      fab-provider-result: ${{ inputs.run_fab_provider_validation && needs.fab_provider_validation.result || 'skipped' }}
+      fab-provider-result: ${{ inputs.run_fab_provider_validation && needs.fab_provider_validation.outputs.result_summary || 'skipped' }}
+      fab-provider-suite-result: ${{ inputs.run_fab_provider_validation && needs.fab_provider_validation.result || 'skipped' }}
       nightly-compatibility-enabled: ${{ inputs.run_nightly_compatibility }}
       nightly-compatibility-result: ${{ inputs.run_nightly_compatibility && needs.nightly_compatibility.result || 'skipped' }}
       external-real-validation-enabled: ${{ inputs.run_external_real_validation }}
