@@ -13,20 +13,9 @@ def main() -> None:
 
     data = json.loads(Path(args.sbom_json).read_text(encoding="utf-8"))
     components = data.get("components") or []
-    metadata = data.get("metadata") or {}
-    lines = [
-        "# SBOM summary",
-        "",
-        f"- Components: {len(components)}",
-        f"- Serial number: {data.get('serialNumber', '—')}",
-        "",
-        "| Name | Version | Type |",
-        "|---|---|---|",
-    ]
+    lines = ["# SBOM summary", "", f"- Components: {len(components)}", f"- Serial number: {data.get('serialNumber', '—')}", "", "| Name | Version | Type |", "|---|---|---|"]
     for item in components[:100]:
-        lines.append(
-            f"| {item.get('name', '')} | {item.get('version', '')} | {item.get('type', '')} |"
-        )
+        lines.append(f"| {item.get('name','')} | {item.get('version','')} | {item.get('type','')} |")
     Path(args.output_md).write_text("\n".join(lines) + "\n", encoding="utf-8")
     print("\n".join(lines))
 
