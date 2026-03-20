@@ -339,9 +339,7 @@ class UIRenderer:
 
     def _render_template(self, template_name: str, **context: str) -> str:
         """Render a file-backed HTML template using a string-safe mapping."""
-        template = Template(
-            self._read_ui_resource(f"templates/{template_name}")
-        )
+        template = Template(self._read_ui_resource(f"templates/{template_name}"))
         return template.safe_substitute(context)
 
     def _load_auth_css(self) -> str:
