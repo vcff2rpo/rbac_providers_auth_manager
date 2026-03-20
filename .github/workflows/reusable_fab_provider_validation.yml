@@ -27,6 +27,9 @@ on:
 permissions:
   contents: read
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   fab-provider-mirror:
     name: fab provider mirror (Airflow ${{ inputs.airflow-version }}, FAB ${{ inputs['fab-provider-version'] }}, Python ${{ inputs.python-version }})

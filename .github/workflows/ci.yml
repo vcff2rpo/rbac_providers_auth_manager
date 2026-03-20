@@ -1,4 +1,4 @@
-name: v86 manual CI gate
+name: manual CI gate
 
 on:
   workflow_dispatch:
@@ -50,11 +50,14 @@ on:
         type: boolean
 
 concurrency:
-  group: v86-manual-ci-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
   contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   quality:
@@ -123,7 +126,7 @@ jobs:
       python-version: "3.13"
 
   review_pr_gate:
-    if: ${{ always() && github.ref_name == 'v86' }}
+    if: ${{ always() && github.ref_type == 'branch' && github.ref_name != 'main' }}
     needs:
       - quality
       - deep_validation
@@ -142,8 +145,8 @@ jobs:
       create-review-pr: ${{ inputs.create_review_pr }}
       source-branch: ${{ github.ref_name }}
       base-branch: main
-      review-branch-prefix: ready/v86
-      pr-title: "Review: v86 ready for main"
+      review-branch-prefix: "${{ format('ready/{0}', github.ref_name) }}"
+      pr-title: "${{ format('Review: {0} ready for main', github.ref_name) }}"
       quality-result: ${{ needs.quality.result }}
       deep-validation-enabled: ${{ inputs.run_deep_validation }}
       deep-validation-result: ${{ inputs.run_deep_validation && needs.deep_validation.result || 'skipped' }}

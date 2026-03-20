@@ -17,6 +17,12 @@ on:
 permissions:
   contents: read
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+env:
+  LICENSE_ARTIFACT_DIR: .ci-artifacts/license
+
 jobs:
   requirements_usage:
     name: requirements usage
@@ -32,18 +38,18 @@ jobs:
       - name: Report requirements file usage
         run: |
           set -o pipefail
-          mkdir -p .ci-artifacts/license
+          mkdir -p "$LICENSE_ARTIFACT_DIR"
           python scripts/ci/report_requirements_usage.py \
             --repo-root . \
-            --output-md .ci-artifacts/license/requirements-usage.md \
-            --output-json .ci-artifacts/license/requirements-usage.json \
-            2>&1 | tee .ci-artifacts/license/requirements-usage.log
+            --output-md "$LICENSE_ARTIFACT_DIR/requirements-usage.md" \
+            --output-json "$LICENSE_ARTIFACT_DIR/requirements-usage.json" \
+            2>&1 | tee "$LICENSE_ARTIFACT_DIR/requirements-usage.log"
       - name: Upload requirements usage artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: requirements-usage
-          path: .ci-artifacts/license
+          path: ${{ env.LICENSE_ARTIFACT_DIR }}
 
   license_compliance:
     name: license compliance
@@ -61,21 +67,49 @@ jobs:
         run: |
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install pip-licenses==5.0.0 reuse==5.0.2
+          python -m pip check
       - name: Run license compliance scan
         run: |
           set -o pipefail
-          mkdir -p .ci-artifacts/license
+          mkdir -p "$LICENSE_ARTIFACT_DIR"
           python scripts/ci/check_license_compliance.py \
             --repo-root . \
-            --output-md .ci-artifacts/license/license-compliance.md \
-            --output-json .ci-artifacts/license/license-compliance.json \
-            2>&1 | tee .ci-artifacts/license/license-compliance.log
+            --output-md "$LICENSE_ARTIFACT_DIR/license-compliance.md" \
+            --output-json "$LICENSE_ARTIFACT_DIR/license-compliance.json" \
+            2>&1 | tee "$LICENSE_ARTIFACT_DIR/license-compliance.log"
       - name: Upload license artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: license-compliance
-          path: .ci-artifacts/license
+          path: ${{ env.LICENSE_ARTIFACT_DIR }}
+
+  release_readiness:
+    name: release readiness
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ inputs.python-version }}
+      - name: Check release readiness and repository hygiene
+        run: |
+          set -o pipefail
+          mkdir -p "$LICENSE_ARTIFACT_DIR"
+          python scripts/ci/check_release_readiness.py \
+            --repo-root . \
+            --output-md "$LICENSE_ARTIFACT_DIR/release-readiness.md" \
+            --output-json "$LICENSE_ARTIFACT_DIR/release-readiness.json" \
+            2>&1 | tee "$LICENSE_ARTIFACT_DIR/release-readiness.log"
+      - name: Upload release readiness artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-readiness
+          path: ${{ env.LICENSE_ARTIFACT_DIR }}
 
   sbom:
     name: sbom
@@ -91,23 +125,24 @@ jobs:
       - name: Install SBOM tooling
         run: |
           python -m pip install --upgrade pip setuptools wheel
-          python -m pip install cyclonedx-bom==4.1.0
+          python -m pip install cyclonedx-bom==7.2.1
+          python -m pip check
       - name: Generate SBOM
         run: |
           set -o pipefail
-          mkdir -p .ci-artifacts/license
-          cyclonedx-py environment --of JSON --output-file .ci-artifacts/license/sbom.json
-          cyclonedx-py environment --of XML --output-file .ci-artifacts/license/sbom.xml
+          mkdir -p "$LICENSE_ARTIFACT_DIR"
+          cyclonedx-py environment --of JSON -o "$LICENSE_ARTIFACT_DIR/sbom.json"
+          cyclonedx-py environment --of XML -o "$LICENSE_ARTIFACT_DIR/sbom.xml"
           python scripts/ci/summarize_sbom.py \
-            --sbom-json .ci-artifacts/license/sbom.json \
-            --output-md .ci-artifacts/license/sbom-summary.md \
-            2>&1 | tee .ci-artifacts/license/sbom.log
+            --sbom-json "$LICENSE_ARTIFACT_DIR/sbom.json" \
+            --output-md "$LICENSE_ARTIFACT_DIR/sbom-summary.md" \
+            2>&1 | tee "$LICENSE_ARTIFACT_DIR/sbom.log"
       - name: Upload SBOM artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: sbom
-          path: .ci-artifacts/license
+          path: ${{ env.LICENSE_ARTIFACT_DIR }}
 
   static_security:
     name: static security
@@ -120,7 +155,7 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ inputs.python-version }}
-      - name: Install Bandit
+      - name: Install static security tooling
         run: |
           python -m pip install --upgrade pip setuptools wheel
           python -m pip install bandit[toml]==1.8.6
@@ -132,51 +167,49 @@ jobs:
       - name: Run Bandit and capture exit code
         run: |
           set +e
-          mkdir -p .ci-artifacts/license
-          python -m bandit -q -r . -x tests,.ci-artifacts,ci_review -f txt -o .ci-artifacts/license/bandit.txt
+          mkdir -p "$LICENSE_ARTIFACT_DIR"
+          python -m bandit -q -r . -x .ci-artifacts,ci_review -f txt -o "$LICENSE_ARTIFACT_DIR/bandit.txt"
           BANDIT_RC=$?
           echo "bandit_rc=$BANDIT_RC" >> "$GITHUB_ENV"
           set -e
       - name: Run Gitleaks and capture exit code
         run: |
           set +e
-          gitleaks detect --source . --config .gitleaks.toml --report-path .ci-artifacts/license/gitleaks.json --no-banner
+          gitleaks detect --source . --config .gitleaks.toml --report-path "$LICENSE_ARTIFACT_DIR/gitleaks.json" --no-banner
           GITLEAKS_RC=$?
           echo "gitleaks_rc=$GITLEAKS_RC" >> "$GITHUB_ENV"
           set -e
       - name: Render static security summary
         run: |
-          {
-            echo "# Static security summary"
-            echo
-            echo "| Check | Exit code |"
-            echo "|---|---|"
-            echo "| Bandit | ${bandit_rc:-unknown} |"
-            echo "| Gitleaks | ${gitleaks_rc:-unknown} |"
-            echo
-            echo "Files produced: bandit.txt, gitleaks.json"
-          } > .ci-artifacts/license/static-security.md
-          cat .ci-artifacts/license/static-security.md >> "$GITHUB_STEP_SUMMARY"
+          python scripts/ci/render_static_security_summary.py \
+            --bandit "$LICENSE_ARTIFACT_DIR/bandit.txt" \
+            --gitleaks "$LICENSE_ARTIFACT_DIR/gitleaks.json" \
+            --bandit-rc "${bandit_rc:-1}" \
+            --gitleaks-rc "${gitleaks_rc:-1}" \
+            --output-md "$LICENSE_ARTIFACT_DIR/static-security.md" \
+            --output-json "$LICENSE_ARTIFACT_DIR/static-security.json"
+          cat "$LICENSE_ARTIFACT_DIR/static-security.md" >> "$GITHUB_STEP_SUMMARY"
       - name: Upload static security artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: static-security
-          path: .ci-artifacts/license
+          path: ${{ env.LICENSE_ARTIFACT_DIR }}
       - name: Fail on security findings
         run: |
           if [ "${bandit_rc:-1}" != "0" ] || [ "${gitleaks_rc:-1}" != "0" ]; then
-            echo "Static security tooling reported findings."
+            echo "Static security tooling reported findings. Inspect static-security.md and the raw reports."
             exit 1
           fi
 
   summary:
     name: license compliance summary
     runs-on: ubuntu-latest
-    if: always()
+    if: ${{ always() }}
     needs:
       - requirements_usage
       - license_compliance
+      - release_readiness
       - sbom
       - static_security
     steps:
@@ -185,14 +218,21 @@ jobs:
           {
             echo "# License compliance lane"
             echo
-            echo "| Job | Executed | Result | What was checked |"
-            echo "|---|---|---|---|"
-            echo "| requirements_usage | [x] yes | ${{ needs.requirements_usage.result }} | requirements*.txt usage across workflows |"
-            echo "| license_compliance | [x] yes | ${{ needs.license_compliance.result }} | Apache distribution files, REUSE metadata, dependency license scan, source heuristic scan |"
-            echo "| sbom | [x] yes | ${{ needs.sbom.result }} | CycloneDX SBOM JSON/XML generation |"
-            echo "| static_security | [x] yes | ${{ needs.static_security.result }} | Bandit plus Gitleaks static scanning |"
+            echo "| Job | Executed | Result | Files used | What was checked |"
+            echo "|---|---|---|---|---|"
+            echo "| requirements_usage | [x] yes | ${{ needs.requirements_usage.result }} | requirements*.txt, .github/workflows/*.yml | requirements file usage across workflows |"
+            echo "| license_compliance | [x] yes | ${{ needs.license_compliance.result }} | LICENSE, NOTICE, REUSE.toml, LICENSES/Apache-2.0.txt, repository sources | Apache distribution files, REUSE metadata, dependency license scan, source heuristic scan |"
+            echo "| release_readiness | [x] yes | ${{ needs.release_readiness.result }} | README.md, py.typed, pyproject.toml/setup.py, repository hygiene | release-readiness and committed cache/build-artefact checks |"
+            echo "| sbom | [x] yes | ${{ needs.sbom.result }} | installed environment | CycloneDX SBOM JSON/XML generation |"
+            echo "| static_security | [x] yes | ${{ needs.static_security.result }} | repository sources, .gitleaks.toml | Bandit plus Gitleaks static scanning with finding summary |"
           } >> "$GITHUB_STEP_SUMMARY"
-          for result in "${{ needs.requirements_usage.result }}" "${{ needs.license_compliance.result }}" "${{ needs.sbom.result }}" "${{ needs.static_security.result }}"; do
+          for result in \
+            "${{ needs.requirements_usage.result }}" \
+            "${{ needs.license_compliance.result }}" \
+            "${{ needs.release_readiness.result }}" \
+            "${{ needs.sbom.result }}" \
+            "${{ needs.static_security.result }}"
+          do
             if [ "$result" != "success" ]; then
               exit 1
             fi

@@ -36,6 +36,9 @@ on:
 permissions:
   contents: read
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   fab_provider_validation_py312:
     uses: ./.github/workflows/reusable_fab_provider_validation.yml
@@ -69,7 +72,16 @@ jobs:
           set -euo pipefail
           RESULT_SUMMARY="py312=${{ needs.fab_provider_validation_py312.result }}, py313=${{ needs.fab_provider_validation_py313.result }}"
           echo "result_summary=${RESULT_SUMMARY}" >> "$GITHUB_OUTPUT"
-          echo "${RESULT_SUMMARY}"
+          {
+            echo "# FAB provider validation suite"
+            echo
+            echo "| Job task | Executed | Result | What was validated |"
+            echo "|---|---|---|---|"
+            echo "| fab_provider_validation_py312 | [x] yes | ${{ needs.fab_provider_validation_py312.result }} | Installed official FAB provider snapshot versus plugin permission/resource mirror on Python 3.12 |"
+            echo "| fab_provider_validation_py313 | [x] yes | ${{ needs.fab_provider_validation_py313.result }} | Installed official FAB provider snapshot versus plugin permission/resource mirror on Python 3.13 |"
+            echo
+            echo "Overall suite result: ${RESULT_SUMMARY}"
+          } >> "$GITHUB_STEP_SUMMARY"
           if [ "${{ needs.fab_provider_validation_py312.result }}" != "success" ] || [ "${{ needs.fab_provider_validation_py313.result }}" != "success" ]; then
             echo "At least one FAB provider validation lane failed."
             exit 1

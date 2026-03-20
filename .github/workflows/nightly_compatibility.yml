@@ -12,6 +12,9 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   nightly_compatibility:
     uses: ./.github/workflows/reusable_nightly_compatibility.yml

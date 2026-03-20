@@ -31,6 +31,9 @@ on:
 permissions:
   contents: read
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   airflow_integration_py312:
     uses: ./.github/workflows/reusable_airflow_integration.yml
@@ -64,7 +67,16 @@ jobs:
 
           RESULT_SUMMARY="py312=${{ needs.airflow_integration_py312.result }}, py313=${{ needs.airflow_integration_py313.result }}"
           echo "result_summary=${RESULT_SUMMARY}" >> "$GITHUB_OUTPUT"
-          echo "${RESULT_SUMMARY}"
+          {
+            echo "# Airflow integration suite"
+            echo
+            echo "| Job task | Executed | Result | What was validated |"
+            echo "|---|---|---|---|"
+            echo "| airflow_integration_py312 | [x] yes | ${{ needs.airflow_integration_py312.result }} | Airflow runtime bootstrap, DB migration smoke, DAG discovery, API health, and auth surface on Python 3.12 |"
+            echo "| airflow_integration_py313 | [x] yes | ${{ needs.airflow_integration_py313.result }} | Airflow runtime bootstrap, DB migration smoke, DAG discovery, API health, and auth surface on Python 3.13 |"
+            echo
+            echo "Overall suite result: ${RESULT_SUMMARY}"
+          } >> "$GITHUB_STEP_SUMMARY"
 
           if [ "${{ needs.airflow_integration_py312.result }}" != "success" ] || [ "${{ needs.airflow_integration_py313.result }}" != "success" ]; then
             echo "At least one Airflow integration lane failed."

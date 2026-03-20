@@ -10,7 +10,7 @@ on:
       source-branch:
         required: false
         type: string
-        default: v86
+        default: feature-branch
       base-branch:
         required: false
         type: string
@@ -18,11 +18,11 @@ on:
       review-branch-prefix:
         required: false
         type: string
-        default: ready/v86
+        default: ready/feature-branch
       pr-title:
         required: false
         type: string
-        default: "Review: v86 ready for main"
+        default: "Review: feature-branch ready for main"
       quality-result:
         required: false
         type: string
@@ -102,6 +102,9 @@ on:
 
 permissions:
   contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   gate:

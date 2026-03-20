@@ -11,6 +11,51 @@ class LaneTask:
     description: str
 
 
+PHASES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "Static analysis, typing, and contract catalog",
+        ("quality", "deep_validation"),
+    ),
+    (
+        "Runtime and identity integration",
+        ("airflow_integration", "identity_provider_integration"),
+    ),
+    (
+        "Compatibility and external environment validation",
+        (
+            "fab_provider_validation",
+            "nightly_compatibility",
+            "external_real_validation",
+        ),
+    ),
+    (
+        "Compliance, security, and release readiness",
+        ("license_compliance",),
+    ),
+)
+
+LANE_DISPLAY_NAMES: dict[str, str] = {
+    "quality": "Quality gate",
+    "deep_validation": "Deep validation",
+    "airflow_integration": "Airflow integration",
+    "identity_provider_integration": "Identity provider integration",
+    "fab_provider_validation": "Official FAB provider validation",
+    "nightly_compatibility": "Nightly compatibility matrix",
+    "external_real_validation": "External real-environment validation",
+    "license_compliance": "Licensing, security, and release readiness",
+}
+
+LANE_PURPOSE: dict[str, str] = {
+    "quality": "Fast repository-wide static and contract checks that should fail early when code or CI helpers regress.",
+    "deep_validation": "Broader unit and mock validation with coverage and dead-code scanning across multiple Python versions.",
+    "airflow_integration": "Bootstraps Airflow with the plugin and validates runtime import, database, DAG, auth-surface, and API behavior.",
+    "identity_provider_integration": "Exercises live LDAP-container behavior and Entra callback/browser-flow integration paths.",
+    "fab_provider_validation": "Validates the plugin RBAC mirror against the installed official FAB provider release.",
+    "nightly_compatibility": "Scheduled compatibility sweep across the declared Airflow, FAB provider, and Python version matrix.",
+    "external_real_validation": "Optional checks against real LDAP, real Entra, and DB-backed role persistence when secrets are provided.",
+    "license_compliance": "Checks licensing materials, SBOM generation, static security findings, and repository release readiness.",
+}
+
 SUITE_SOURCE_AREAS: dict[str, tuple[str, ...]] = {
     "quality": (
         "rbac_providers_auth_manager.authorization",
@@ -72,6 +117,8 @@ SUITE_SOURCE_AREAS: dict[str, tuple[str, ...]] = {
         "REUSE.toml",
         "LICENSES/Apache-2.0.txt",
         "scripts/ci/check_license_compliance.py",
+        "scripts/ci/check_release_readiness.py",
+        "scripts/ci/render_static_security_summary.py",
         "scripts/ci/report_requirements_usage.py",
         "scripts/ci/summarize_sbom.py",
         ".github/workflows/reusable_license_compliance.yml",
@@ -90,7 +137,7 @@ LANE_TASKS: dict[str, tuple[LaneTask, ...]] = {
         LaneTask(
             lane="quality",
             task="compile (Python 3.13)",
-            files=("repository Python sources", "tests/ci/*.py"),
+            files=("repository Python sources", "tests/ci/*.py", "scripts/ci/*.py"),
             description="Compiles the repository to catch syntax and import-time bytecode errors early.",
         ),
         LaneTask(
@@ -105,13 +152,13 @@ LANE_TASKS: dict[str, tuple[LaneTask, ...]] = {
         LaneTask(
             lane="quality",
             task="ruff lint",
-            files=("repository Python sources",),
-            description="Runs static lint checks across the repository.",
+            files=("repository Python sources", "tests/ci/*.py", "scripts/ci/*.py"),
+            description="Runs static lint checks across repository sources, tests, and CI helpers.",
         ),
         LaneTask(
             lane="quality",
             task="ruff format check",
-            files=("repository Python sources",),
+            files=("repository Python sources", "tests/ci/*.py", "scripts/ci/*.py"),
             description="Verifies repository formatting without modifying files.",
         ),
         LaneTask(
@@ -122,9 +169,9 @@ LANE_TASKS: dict[str, tuple[LaneTask, ...]] = {
         ),
         LaneTask(
             lane="quality",
-            task="mypy tests",
-            files=("tests/ci/* selected by suite quality", "scripts/ci/*"),
-            description="Type-checks the CI tests and helper scripts.",
+            task="mypy tests and CI helpers",
+            files=("tests/ci/**/*.py", "scripts/ci/**/*.py"),
+            description="Type-checks the full CI-facing test and helper surface, not just the quality-suite subset.",
         ),
         LaneTask(
             lane="quality",
@@ -184,12 +231,16 @@ LANE_TASKS: dict[str, tuple[LaneTask, ...]] = {
                 "tests/ci/test_entra_backend_simulation.py",
                 "tests/ci/test_entra_browser_flow_integration.py",
             ),
-            description="Executes the three deep-validation shards across the configured Python matrix with coverage.",
+            description="Executes the deep-validation shards across the configured Python matrix with coverage.",
         ),
         LaneTask(
             lane="deep_validation",
             task="dead code scan",
-            files=("repository Python sources", "tests/**"),
+            files=(
+                "rbac_providers_auth_manager/**",
+                "tests/ci/**/*.py",
+                "scripts/ci/**/*.py",
+            ),
             description="Runs vulture to detect unreachable or unused code paths.",
         ),
     ),
@@ -206,7 +257,7 @@ LANE_TASKS: dict[str, tuple[LaneTask, ...]] = {
         ),
         LaneTask(
             lane="airflow_integration",
-            task="Airflow DB/API smoke",
+            task="Airflow DB, DAG, UI, and API smoke",
             files=(
                 "scripts/ci/check_airflow_discovery.sh",
                 "scripts/ci/check_airflow_auth_surface.sh",
@@ -257,7 +308,7 @@ LANE_TASKS: dict[str, tuple[LaneTask, ...]] = {
                 "scripts/ci/validate_fab_mirror.py",
                 "tests/ci/test_fab_provider_mirror_latest.py",
             ),
-            description="Runs the FAB mirror validation across the scheduled Airflow/FAB/Python matrix.",
+            description="Runs the FAB mirror validation across the scheduled Airflow, FAB provider, and Python matrix.",
         ),
     ),
     "external_real_validation": (
@@ -303,6 +354,17 @@ LANE_TASKS: dict[str, tuple[LaneTask, ...]] = {
         ),
         LaneTask(
             lane="license_compliance",
+            task="release readiness",
+            files=(
+                "README.md",
+                "py.typed",
+                "pyproject.toml or setup.py",
+                "repository tree hygiene",
+            ),
+            description="Checks whether the repository is shaped like a releasable Python distribution and flags committed cache/build artefacts.",
+        ),
+        LaneTask(
+            lane="license_compliance",
             task="SBOM",
             files=("installed environment",),
             description="Generates CycloneDX JSON/XML SBOM output and a compact markdown summary.",
@@ -311,7 +373,7 @@ LANE_TASKS: dict[str, tuple[LaneTask, ...]] = {
             lane="license_compliance",
             task="static security",
             files=("repository sources", ".gitleaks.toml"),
-            description="Runs Bandit and Gitleaks and publishes a static-security summary.",
+            description="Runs Bandit and Gitleaks and publishes a finding-oriented static-security summary.",
         ),
     ),
 }
@@ -349,6 +411,18 @@ SUPPLEMENTAL_AREAS: tuple[dict[str, object], ...] = (
         "lanes": ("deep_validation",),
     },
     {
+        "name": "Airflow auth-manager runtime smoke",
+        "tag": "airflow_runtime_smoke",
+        "status": "covered",
+        "lanes": ("airflow_integration",),
+    },
+    {
+        "name": "Official FAB provider compatibility snapshot",
+        "tag": "official_fab_snapshot",
+        "status": "covered",
+        "lanes": ("fab_provider_validation", "nightly_compatibility"),
+    },
+    {
         "name": "Apache distribution files (LICENSE and NOTICE)",
         "tag": "apache_distribution_files",
         "status": "covered",
@@ -363,6 +437,12 @@ SUPPLEMENTAL_AREAS: tuple[dict[str, object], ...] = (
     {
         "name": "Dependency license inventory",
         "tag": "dependency_license_inventory",
+        "status": "covered",
+        "lanes": ("license_compliance",),
+    },
+    {
+        "name": "Release-readiness and repository hygiene",
+        "tag": "release_readiness",
         "status": "covered",
         "lanes": ("license_compliance",),
     },

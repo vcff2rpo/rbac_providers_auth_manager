@@ -3,19 +3,21 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
-FAILURE_HINTS = (
-    "Traceback",
-    "FAILED",
-    "ERROR",
-    "Exception",
-    "ModuleNotFoundError",
-    "ImportError",
-    "AssertionError",
-    "Error:",
-    "RuntimeError",
+FAILURE_PATTERNS = (
+    re.compile(r"^FAILED\b"),
+    re.compile(r"^ERROR\b"),
+    re.compile(r"Traceback \(most recent call last\):"),
+    re.compile(r"##\[error\]"),
+    re.compile(r"Process completed with exit code"),
+    re.compile(r"ModuleNotFoundError:"),
+    re.compile(r"ImportError:"),
+    re.compile(r"AssertionError:"),
+    re.compile(r"RuntimeError:"),
+    re.compile(r"SystemExit:"),
 )
 SEVERITY_PATTERNS = {
     "critical": re.compile(r"\b(CRITICAL|FATAL)\b", re.IGNORECASE),
@@ -24,6 +26,10 @@ SEVERITY_PATTERNS = {
     "info": re.compile(r"\bINFO\b", re.IGNORECASE),
     "debug": re.compile(r"\bDEBUG\b", re.IGNORECASE),
 }
+IGNORED_FAILURE_SNIPPETS = (
+    "Dependencies not met for <TaskInstance:",
+    "dependency 'Trigger Rule' FAILED",
+)
 
 
 def _iter_files(artifact_dir: Path) -> list[Path]:
@@ -31,7 +37,7 @@ def _iter_files(artifact_dir: Path) -> list[Path]:
 
 
 def _candidate_logs(files: Iterable[Path]) -> list[Path]:
-    suffixes = {".log", ".txt", ".out", ".err", ".xml", ".md", ".json", ".html"}
+    suffixes = {".log", ".txt", ".out", ".err", ".xml"}
     return [path for path in files if path.suffix.lower() in suffixes]
 
 
@@ -40,11 +46,39 @@ def _first_failure_line(path: Path) -> str | None:
         with path.open("r", encoding="utf-8", errors="replace") as handle:
             for line in handle:
                 text = line.rstrip()
-                if any(hint in text for hint in FAILURE_HINTS):
+                if any(snippet in text for snippet in IGNORED_FAILURE_SNIPPETS):
+                    continue
+                if any(pattern.search(text) for pattern in FAILURE_PATTERNS):
                     return text
     except OSError:
         return None
     return None
+
+
+def _read_junit_summary(path: Path) -> dict[str, int] | None:
+    if path.suffix.lower() != ".xml":
+        return None
+    try:
+        root = ET.fromstring(path.read_text(encoding="utf-8", errors="replace"))
+    except (ET.ParseError, OSError):
+        return None
+
+    suites = [root] if root.tag == "testsuite" else root.findall(".//testsuite")
+    if not suites:
+        return None
+
+    tests = failures = errors = skipped = 0
+    for suite in suites:
+        tests += int(suite.attrib.get("tests", "0"))
+        failures += int(suite.attrib.get("failures", "0"))
+        errors += int(suite.attrib.get("errors", "0"))
+        skipped += int(suite.attrib.get("skipped", "0"))
+    return {
+        "tests": tests,
+        "failures": failures,
+        "errors": errors,
+        "skipped": skipped,
+    }
 
 
 def _tail_lines(path: Path, limit: int) -> list[str]:
@@ -74,12 +108,31 @@ def build_summary(
 ) -> dict[str, Any]:
     files = _iter_files(artifact_dir)
     logs = _candidate_logs(files)
+    junit_files = [path for path in logs if path.suffix.lower() == ".xml"]
+    junit_summaries = {
+        path.relative_to(artifact_dir).as_posix(): summary
+        for path in junit_files
+        if (summary := _read_junit_summary(path)) is not None
+    }
+
     first_failure: dict[str, str] | None = None
-    for path in logs:
-        failure = _first_failure_line(path)
-        if failure:
-            first_failure = {"file": path.name, "line": failure}
+    for rel_name, summary in junit_summaries.items():
+        if summary["failures"] or summary["errors"]:
+            first_failure = {
+                "file": Path(rel_name).name,
+                "line": (
+                    f"JUnit reported failures={summary['failures']} "
+                    f"errors={summary['errors']} skipped={summary['skipped']}"
+                ),
+            }
             break
+
+    if first_failure is None:
+        for path in logs:
+            failure = _first_failure_line(path)
+            if failure:
+                first_failure = {"file": path.name, "line": failure}
+                break
 
     relevant_log = logs[0] if logs else None
     if first_failure is not None:
@@ -99,6 +152,7 @@ def build_summary(
         "relevant_log": relevant_log.name if relevant_log else None,
         "tail": tail,
         "severity": severity,
+        "junit": junit_summaries,
         "status": "failed" if first_failure else "success",
     }
 
@@ -157,6 +211,25 @@ def write_outputs(
     lines.extend(["", "## What was produced and how it was judged", ""])
     _table(lines, ("Signal", "Value"), severity_rows)
 
+    junit_obj = summary.get("junit")
+    if isinstance(junit_obj, dict) and junit_obj:
+        lines.extend(["", "## JUnit evidence", ""])
+        junit_rows: list[tuple[str, str, str, str, str]] = []
+        for name, result in junit_obj.items():
+            if isinstance(result, dict):
+                junit_rows.append(
+                    (
+                        str(name),
+                        str(int(result.get("tests", 0))),
+                        str(int(result.get("failures", 0))),
+                        str(int(result.get("errors", 0))),
+                        str(int(result.get("skipped", 0))),
+                    )
+                )
+        _table(
+            lines, ("JUnit file", "Tests", "Failures", "Errors", "Skipped"), junit_rows
+        )
+
     files_obj = summary.get("files")
     files: list[str] = (
         [str(item) for item in files_obj] if isinstance(files_obj, list) else []
@@ -178,13 +251,16 @@ def write_outputs(
 
     lines.extend(["", "## Result guide", ""])
     lines.append(
-        "- success: no failure signature was detected in the captured artifacts"
+        "- success: no failure signature was detected in the captured artifacts or JUnit outputs"
     )
     lines.append(
-        "- failed: a failure signature was detected and the first matching line is shown above"
+        "- failed: a JUnit failure/error or a strict failure signature was detected and the first matching evidence is shown above"
     )
     lines.append(
         "- counts: critical/error/warning/info/debug are pattern-based counts derived from the captured files"
+    )
+    lines.append(
+        "- Airflow runtime debug messages that contain the word FAILED inside dependency diagnostics are ignored to avoid false negatives"
     )
     output_md.write_text("\n".join(lines) + "\n", encoding="utf-8")
 

@@ -3,10 +3,10 @@ name: reusable open pr
 on:
   workflow_call:
     inputs:
-      source_branch: {type: string, required: false, default: v86}
+      source_branch: {type: string, required: false, default: feature-branch}
       base_branch: {type: string, required: false, default: main}
-      review_branch_prefix: {type: string, required: false, default: ready/v86}
-      pr_title: {type: string, required: false, default: 'Review: v86 ready for main'}
+      review_branch_prefix: {type: string, required: false, default: ready/feature-branch}
+      pr_title: {type: string, required: false, default: 'Review: feature-branch ready for main'}
       quality_result: {type: string, required: false, default: unknown}
       deep_validation_result: {type: string, required: false, default: unknown}
       airflow_result: {type: string, required: false, default: unknown}
@@ -21,6 +21,9 @@ on:
 permissions:
   contents: write
   pull-requests: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   open_review_pr:

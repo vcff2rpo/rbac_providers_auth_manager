@@ -13,6 +13,9 @@ permissions:
   contents: read
 
 env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+env:
   PACKAGE_NAME: ${{ inputs['package-name'] }}
   PYTHONPATH: ${{ github.workspace }}/..
   QUALITY_ARTIFACT_DIR: .ci-artifacts/quality
@@ -38,6 +41,7 @@ jobs:
             tests/ci/*.py
       - run: python -m pip install --upgrade pip setuptools wheel
       - run: python -m pip install -r requirements-dev.txt
+      - run: python -m pip check
       - run: python -m compileall -q .
 
   pytest_collect:
@@ -58,6 +62,7 @@ jobs:
             tests/ci/*.py
       - run: python -m pip install --upgrade pip setuptools wheel
       - run: python -m pip install -r requirements-dev.txt
+      - run: python -m pip check
       - name: Resolve quality test inventory from contract manifest
         run: echo "QUALITY_TEST_FILES=$(python scripts/ci/list_contract_tests.py --suite quality)" >> "$GITHUB_ENV"
       - name: Collect unit and smoke tests with verbose inventory
@@ -94,6 +99,7 @@ jobs:
             tests/ci/*.py
       - run: python -m pip install --upgrade pip setuptools wheel
       - run: python -m pip install -r requirements-dev.txt
+      - run: python -m pip check
       - run: python -m ruff check .
 
   ruff_format:
@@ -114,6 +120,7 @@ jobs:
             tests/ci/*.py
       - run: python -m pip install --upgrade pip setuptools wheel
       - run: python -m pip install -r requirements-dev.txt
+      - run: python -m pip check
       - run: python -m ruff format --check .
 
   mypy_package:
@@ -134,10 +141,11 @@ jobs:
             tests/ci/*.py
       - run: python -m pip install --upgrade pip setuptools wheel
       - run: python -m pip install -r requirements-dev.txt
+      - run: python -m pip check
       - run: python -m mypy -p "$PACKAGE_NAME"
 
   mypy_tests:
-    name: mypy tests (Python 3.13)
+    name: mypy tests + CI helpers (Python 3.13)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -154,9 +162,8 @@ jobs:
             tests/ci/*.py
       - run: python -m pip install --upgrade pip setuptools wheel
       - run: python -m pip install -r requirements-dev.txt
-      - name: Resolve quality mypy inventory
-        run: echo "QUALITY_TEST_FILES=$(python scripts/ci/list_contract_tests.py --suite quality)" >> "$GITHUB_ENV"
-      - run: python -m mypy $QUALITY_TEST_FILES scripts/ci
+      - run: python -m pip check
+      - run: python -m mypy tests/ci scripts/ci
 
   pytest_family_coverage:
     name: pytest family coverage (${{ matrix.family }}, Python 3.13)
@@ -185,6 +192,7 @@ jobs:
             tests/ci/*.py
       - run: python -m pip install --upgrade pip setuptools wheel
       - run: python -m pip install -r requirements-dev.txt
+      - run: python -m pip check
       - name: Resolve family inventory and threshold
         run: |
           mkdir -p "$QUALITY_ARTIFACT_DIR"
@@ -269,6 +277,7 @@ jobs:
             tests/ci/*.py
       - run: python -m pip install --upgrade pip setuptools wheel
       - run: python -m pip install -r requirements-dev.txt
+      - run: python -m pip check
       - name: Run pip audit with log capture
         run: |
           set -o pipefail
@@ -297,6 +306,7 @@ jobs:
             tests/ci/*.py
       - run: python -m pip install --upgrade pip setuptools wheel
       - run: python -m pip install -r requirements-dev.txt
+      - run: python -m pip check
       - name: Build quality suite artifact summary
         run: |
           python scripts/ci/render_ci_scope_summary.py \
@@ -346,17 +356,19 @@ jobs:
           echo "summarize_quality=${{ needs.summarize_quality.result }}"
           {
             echo "# Quality suite summary"
-            echo ""
-            echo "- compile: ${{ needs.compile.result }}"
-            echo "- pytest_collect: ${{ needs.pytest_collect.result }}"
-            echo "- ruff_lint: ${{ needs.ruff_lint.result }}"
-            echo "- ruff_format: ${{ needs.ruff_format.result }}"
-            echo "- mypy_package: ${{ needs.mypy_package.result }}"
-            echo "- mypy_tests: ${{ needs.mypy_tests.result }}"
-            echo "- pytest_family_coverage: ${{ needs.pytest_family_coverage.result }}"
-            echo "- pip_audit: ${{ needs.pip_audit.result }}"
-            echo "- summarize_quality: ${{ needs.summarize_quality.result }}"
-            echo ""
+            echo
+            echo "| Job task | Executed | Result | Files or scope used | What was tested |"
+            echo "|---|---|---|---|---|"
+            echo "| compile | [x] yes | ${{ needs.compile.result }} | repository Python sources | syntax and bytecode compilation hygiene |"
+            echo "| pytest_collect | [x] yes | ${{ needs.pytest_collect.result }} | tests/ci selected by quality suite | test discovery and repository coverage catalog generation |"
+            echo "| ruff_lint | [x] yes | ${{ needs.ruff_lint.result }} | repository Python sources, tests/ci, scripts/ci | lint and import-quality checks |"
+            echo "| ruff_format | [x] yes | ${{ needs.ruff_format.result }} | repository Python sources, tests/ci, scripts/ci | formatting compliance |"
+            echo "| mypy_package | [x] yes | ${{ needs.mypy_package.result }} | rbac_providers_auth_manager/** | package typing surface |"
+            echo "| mypy_tests | [x] yes | ${{ needs.mypy_tests.result }} | tests/ci/**/*.py, scripts/ci/**/*.py | CI test and helper typing surface |"
+            echo "| pytest_family_coverage | [x] yes | ${{ needs.pytest_family_coverage.result }} | config-runtime, rbac-mirror, browser-flows, provider-simulations, bootstrap-imports | functional contract coverage by family |"
+            echo "| pip_audit | [x] yes | ${{ needs.pip_audit.result }} | installed dependency environment | known Python package vulnerabilities |"
+            echo "| summarize_quality | [x] yes | ${{ needs.summarize_quality.result }} | quality artifacts | artifact-level evidence synthesis |"
+            echo
             echo "Expected artifacts: quality-pytest-collect, quality-family-*, quality-suite-summary"
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Fail if any job failed

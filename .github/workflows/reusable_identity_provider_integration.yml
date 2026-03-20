@@ -17,6 +17,9 @@ on:
 permissions:
   contents: read
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   identity-provider-integration:
     name: identity provider integration (Python ${{ inputs.python-version }})
