@@ -1,0 +1,114 @@
+name: reusable FAB provider support validation
+
+on:
+  workflow_call:
+    inputs:
+      package-name:
+        description: Python package name
+        required: false
+        type: string
+        default: rbac_providers_auth_manager
+      airflow-version:
+        description: Airflow version to install for provider mirror validation
+        required: false
+        type: string
+        default: "3.1.8"
+      fab-provider-version:
+        description: apache-airflow-providers-fab version to validate against
+        required: false
+        type: string
+        default: "3.5.0"
+      python-version:
+        description: Python version for provider mirror validation
+        required: false
+        type: string
+        default: "3.13"
+
+permissions:
+  contents: read
+
+jobs:
+  fab-provider-mirror:
+    name: fab provider support (Airflow ${{ inputs.airflow-version }}, FAB ${{ inputs['fab-provider-version'] }}, Python ${{ inputs.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PACKAGE_NAME: ${{ inputs['package-name'] }}
+      AIRFLOW_VERSION: ${{ inputs['airflow-version'] }}
+      FAB_PROVIDER_VERSION: ${{ inputs['fab-provider-version'] }}
+      PYTHONPATH: ${{ github.workspace }}/..
+      FAB_ARTIFACT_DIR: .ci-artifacts/fab-provider
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ inputs.python-version }}
+          cache: pip
+          cache-dependency-path: |
+            requirements-fab-provider-validation.txt
+            tests/ci/*.py
+
+      - name: Upgrade packaging tools
+        run: python -m pip install --upgrade pip setuptools wheel
+
+      - name: Resolve Airflow constraints URL
+        run: |
+          echo "AIRFLOW_CONSTRAINTS_URL=https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-${{ inputs.python-version }}.txt" >> "$GITHUB_ENV"
+
+      - name: Install Airflow core with constraints
+        run: |
+          python -m pip install "apache-airflow==${AIRFLOW_VERSION}" --constraint "${AIRFLOW_CONSTRAINTS_URL}"
+
+      - name: Install official FAB provider after Airflow installation
+        run: |
+          python -m pip install "apache-airflow-providers-fab==${FAB_PROVIDER_VERSION}"
+          python -m pip install -r requirements-fab-provider-validation.txt
+          python -m pip check
+
+      - name: Capture Airflow and FAB provider versions
+        run: |
+          set -o pipefail
+          mkdir -p "$FAB_ARTIFACT_DIR"
+          python -m airflow version 2>&1 | tee "$FAB_ARTIFACT_DIR/airflow-version.log"
+          python - <<'PY' 2>&1 | tee "$FAB_ARTIFACT_DIR/fab-provider-version.log"
+          from importlib.metadata import version
+          print("apache-airflow-providers-fab=", version("apache-airflow-providers-fab"))
+          print("apache-airflow=", version("apache-airflow"))
+          PY
+
+      - name: Generate official FAB provider support snapshot
+        run: |
+          set -o pipefail
+          python scripts/ci/validate_fab_mirror.py 2>&1 | tee "$FAB_ARTIFACT_DIR/fab-support-validation.log"
+
+      - name: Validate custom plugin support for official FAB provider permissions
+        run: |
+          set -o pipefail
+          python -m pytest -vv -rA -s --showlocals --durations=20 --log-cli-level=INFO \
+            --maxfail=1 \
+            --disable-warnings \
+            --junitxml="$FAB_ARTIFACT_DIR/pytest-fab-provider.xml" \
+            tests/ci/test_fab_provider_mirror_latest.py 2>&1 | tee "$FAB_ARTIFACT_DIR/pytest-fab-provider.log"
+
+      - name: Build fab provider validation artifact summary
+        if: always()
+        run: |
+          python scripts/ci/summarize_ci_artifacts.py \
+            --artifact-dir $FAB_ARTIFACT_DIR \
+            --lane-name "fab provider support validation" \
+            --output-md $FAB_ARTIFACT_DIR/artifact-summary.md \
+            --output-json $FAB_ARTIFACT_DIR/artifact-summary.json
+          cat $FAB_ARTIFACT_DIR/artifact-summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload FAB provider validation artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fab-provider-validation-py${{ inputs.python-version }}
+          path: ${{ env.FAB_ARTIFACT_DIR }}
