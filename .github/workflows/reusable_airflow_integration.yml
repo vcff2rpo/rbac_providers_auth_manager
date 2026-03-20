@@ -80,7 +80,7 @@ jobs:
 
       - name: Install build prerequisites for python-ldap
         run: |
-          scripts/ci/install_python_ldap_build_deps.sh
+          bash scripts/ci/install_python_ldap_build_deps.sh
           sudo apt-get install -y curl jq
 
       - name: Resolve Airflow constraints URL
@@ -178,7 +178,7 @@ jobs:
           AIRFLOW__LOGGING__LOGGING_LEVEL=DEBUG python -m airflow db migrate 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/airflow-db-migrate.log"
 
       - name: Discover hello world DAG and tasks using plain-text Airflow CLI
-        run: scripts/ci/check_airflow_discovery.sh
+        run: bash scripts/ci/check_airflow_discovery.sh
 
       - name: Execute hello world DAG test run
         run: |
