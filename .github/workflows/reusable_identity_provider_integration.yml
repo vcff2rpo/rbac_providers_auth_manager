@@ -120,11 +120,9 @@ jobs:
       - name: Build identity provider integration artifact summary
         if: always()
         run: |
-          python scripts/ci/summarize_ci_artifacts.py \
-            --artifact-dir $IDP_ARTIFACT_DIR \
-            --lane-name "identity provider integration" \
-            --output-md $IDP_ARTIFACT_DIR/artifact-summary.md \
-            --output-json $IDP_ARTIFACT_DIR/artifact-summary.json
+          python scripts/ci/render_ci_scope_summary.py             --title "identity provider integration scope"             --suite identity_provider_integration             --output "$IDP_ARTIFACT_DIR/idp-scope.md"
+          cat "$IDP_ARTIFACT_DIR/idp-scope.md" >> "$GITHUB_STEP_SUMMARY"
+          python scripts/ci/summarize_ci_artifacts.py             --artifact-dir $IDP_ARTIFACT_DIR             --lane-name "identity provider integration"             --output-md $IDP_ARTIFACT_DIR/artifact-summary.md             --output-json $IDP_ARTIFACT_DIR/artifact-summary.json
           cat $IDP_ARTIFACT_DIR/artifact-summary.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload identity-provider artifacts
@@ -132,4 +130,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: identity-provider-integration-py${{ inputs.python-version }}
-          path: ${{ env.IDP_ARTIFACT_DIR }}
+          path: |
+            ${{ env.IDP_ARTIFACT_DIR }}
+            ${{ env.IDP_ARTIFACT_DIR }}/idp-scope.md

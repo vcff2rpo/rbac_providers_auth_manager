@@ -352,6 +352,46 @@ def build_support_report() -> SupportReport:
     )
 
 
+def _markdown_permission_table(
+    title: str, permissions: tuple[dict[str, str], ...]
+) -> list[str]:
+    lines = [f"### {title}", "", "| Action | Resource |", "|---|---|"]
+    if permissions:
+        for item in permissions:
+            lines.append(f"| `{item['action']}` | `{item['resource']}` |")
+    else:
+        lines.append("| _none_ | _none_ |")
+    lines.append("")
+    return lines
+
+
+def _markdown_diff_table(
+    title: str,
+    *,
+    missing: tuple[dict[str, str], ...],
+    extra: tuple[dict[str, str], ...],
+) -> list[str]:
+    lines = [
+        f"### {title}",
+        "",
+        "| Difference type | Action | Resource |",
+        "|---|---|---|",
+    ]
+    if not missing and not extra:
+        lines.append("| _none_ | _none_ | _none_ |")
+    else:
+        for item in missing:
+            lines.append(
+                f"| missing in plugin support | `{item['action']}` | `{item['resource']}` |"
+            )
+        for item in extra:
+            lines.append(
+                f"| additional in plugin support | `{item['action']}` | `{item['resource']}` |"
+            )
+    lines.append("")
+    return lines
+
+
 def write_support_artifacts(*, artifact_dir: Path) -> SupportReport:
     artifact_dir.mkdir(parents=True, exist_ok=True)
     report = build_support_report()
@@ -394,10 +434,30 @@ def write_support_artifacts(*, artifact_dir: Path) -> SupportReport:
         "This job validates whether the custom plugin design supports the official non-DB FAB permission surface."
     )
     summary_lines.append("")
+    summary_lines.append("## What was tested")
+    summary_lines.append("")
+    summary_lines.append("- imported official FAB provider role-permission constants")
+    summary_lines.append("- normalized official FAB action/resource vocabulary")
+    summary_lines.append(
+        "- validated plugin policy support for each official non-DB permission"
+    )
+    summary_lines.append(
+        "- compared plugin-supported permissions against the latest official FAB model"
+    )
+    summary_lines.append("- generated per-role missing/additional permission diffs")
+    summary_lines.append("")
+    summary_lines.append("## Overall result")
+    summary_lines.append("")
+    summary_lines.append(
+        f"- unsupported official permissions total: {len(report.unsupported_permissions)}"
+    )
+    summary_lines.append(f"- contract advisories: {len(report.contract_advisories)}")
+    summary_lines.append("")
     for role_name in ROLE_ORDER:
         unsupported = report.unsupported_official_permissions_by_role[role_name]
         extra = report.plugin_extra_permissions_by_role[role_name]
         summary_lines.append(f"## {role_name}")
+        summary_lines.append("")
         summary_lines.append(
             f"- official permissions: {report.official_permission_counts.get(role_name, 0)}"
         )
@@ -410,22 +470,29 @@ def write_support_artifacts(*, artifact_dir: Path) -> SupportReport:
         summary_lines.append(
             f"- additional plugin-defined permissions vs official model: {len(extra)}"
         )
-        if unsupported:
-            summary_lines.append("- missing list:")
-            for item in unsupported:
-                summary_lines.append(f"  - {item['action']} / {item['resource']}")
-        if extra:
-            summary_lines.append("- additional list:")
-            for item in extra:
-                summary_lines.append(f"  - {item['action']} / {item['resource']}")
         summary_lines.append("")
+        summary_lines.extend(
+            _markdown_permission_table(
+                f"Official FAB permissions ({role_name})",
+                report.official_permissions_by_role[role_name],
+            )
+        )
+        summary_lines.extend(
+            _markdown_permission_table(
+                f"Plugin contract permissions ({role_name})",
+                report.plugin_contract_permissions_by_role[role_name],
+            )
+        )
+        summary_lines.extend(
+            _markdown_diff_table(
+                f"Differences ({role_name})",
+                missing=unsupported,
+                extra=extra,
+            )
+        )
 
-    summary_lines.append(
-        f"- unsupported official permissions total: {len(report.unsupported_permissions)}"
-    )
-    summary_lines.append(f"- contract advisories: {len(report.contract_advisories)}")
+    summary_lines.append("## Artifacts")
     summary_lines.append("")
-    summary_lines.append("Artifacts:")
     summary_lines.append("- official-fab-permissions.json")
     summary_lines.append("- plugin-contract-permissions.json")
     summary_lines.append("- plugin-vs-official-diff.json")
