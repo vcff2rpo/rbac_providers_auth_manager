@@ -31,7 +31,7 @@ def _iter_files(artifact_dir: Path) -> list[Path]:
 
 
 def _candidate_logs(files: Iterable[Path]) -> list[Path]:
-    suffixes = {".log", ".txt", ".out", ".err", ".xml", ".md", ".json"}
+    suffixes = {".log", ".txt", ".out", ".err", ".xml", ".md", ".json", ".html"}
     return [path for path in files if path.suffix.lower() in suffixes]
 
 
@@ -123,23 +123,29 @@ def write_outputs(
         output_json.parent.mkdir(parents=True, exist_ok=True)
         output_json.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
 
-    lines = [f"# {summary['lane_name']} artifact summary", "", "## Overview", ""]
+    lines = [
+        f"# {summary['lane_name']} artifact summary",
+        "",
+        "## High-level status",
+        "",
+    ]
     overview_rows: list[tuple[str, str]] = [
+        ("Job or lane", str(summary["lane_name"])),
         ("Status", str(summary.get("status", "unknown"))),
-        ("Artifact dir", f"`{summary['artifact_dir']}`"),
+        ("Artifact directory scanned", f"`{summary['artifact_dir']}`"),
         ("Produced files", str(summary["file_count"])),
-        ("Relevant log", str(summary.get("relevant_log") or "-")),
+        ("Primary evidence file", str(summary.get("relevant_log") or "-")),
     ]
     first_failure_obj = summary.get("first_failure")
     if isinstance(first_failure_obj, dict):
         overview_rows.append(
-            ("First failure file", str(first_failure_obj.get("file", "-")))
+            ("First failing file", str(first_failure_obj.get("file", "-")))
         )
         overview_rows.append(
-            ("First failure line", str(first_failure_obj.get("line", "-")))
+            ("First failing line", str(first_failure_obj.get("line", "-")))
         )
     else:
-        overview_rows.append(("First failure line", "none detected"))
+        overview_rows.append(("First failing line", "none detected"))
     _table(lines, ("Field", "Value"), overview_rows)
 
     severity_obj = summary.get("severity")
@@ -148,30 +154,37 @@ def write_outputs(
         (level, str(int(severity_map.get(level, 0))))
         for level in ("critical", "error", "warning", "info", "debug")
     ]
-    lines.extend(["", "## Severity scan", ""])
-    _table(lines, ("Level", "Count"), severity_rows)
+    lines.extend(["", "## What was produced and how it was judged", ""])
+    _table(lines, ("Signal", "Value"), severity_rows)
 
     files_obj = summary.get("files")
     files: list[str] = (
         [str(item) for item in files_obj] if isinstance(files_obj, list) else []
     )
-    lines.extend(["", "## Produced files", ""])
-    _table(lines, ("File",), [(item,) for item in files])
+    lines.extend(["", "## Files used for this judgment", ""])
+    _table(lines, ("Artifact file",), [(item,) for item in files])
 
     tail_obj = summary.get("tail")
     tail: list[str] = (
         [str(item) for item in tail_obj] if isinstance(tail_obj, list) else []
     )
+    lines.extend(["", "## Detailed result evidence", ""])
     if tail:
-        lines.extend(["", "## Tail of relevant log", "", "```text"])
+        lines.extend(["", "```text"])
         lines.extend(tail)
         lines.append("```")
+    else:
+        lines.append("No log tail was available for this lane.")
 
     lines.extend(["", "## Result guide", ""])
-    lines.append("- success: no failure line detected in captured artifacts")
-    lines.append("- failed: failure line detected in captured artifacts")
     lines.append(
-        "- critical/error/warning/info/debug: counts derived from artifact log content"
+        "- success: no failure signature was detected in the captured artifacts"
+    )
+    lines.append(
+        "- failed: a failure signature was detected and the first matching line is shown above"
+    )
+    lines.append(
+        "- counts: critical/error/warning/info/debug are pattern-based counts derived from the captured files"
     )
     output_md.write_text("\n".join(lines) + "\n", encoding="utf-8")
 

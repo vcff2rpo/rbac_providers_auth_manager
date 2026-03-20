@@ -7,7 +7,15 @@ from pathlib import Path
 from types import ModuleType
 from typing import Iterable, Sequence
 
+from ci_summary_catalog import SUITE_SOURCE_AREAS
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
+SUITE_FILE_OVERRIDES = {
+    "identity_provider_integration": {
+        "tests/ci/test_ldap_live_container_integration.py",
+        "tests/ci/test_entra_browser_flow_integration.py",
+    },
+}
 
 
 def _load_manifest() -> ModuleType:
@@ -25,6 +33,7 @@ def _contracts_for_selector(
 ) -> list[object]:
     if suite:
         files = set(manifest.suite_files(suite))
+        files.update(SUITE_FILE_OVERRIDES.get(suite, set()))
     elif group:
         files = set(manifest.deep_validation_group_files(group))
     elif family:
@@ -34,12 +43,37 @@ def _contracts_for_selector(
     return [contract for contract in manifest.CONTRACTS if contract.path in files]
 
 
-def _capability_names(manifest: ModuleType, tags: set[str]) -> list[str]:
-    names: list[str] = []
+def _capability_catalog(manifest: ModuleType) -> dict[str, str]:
+    catalog: dict[str, str] = {}
     for item in manifest.CAPABILITY_CATALOG:
-        if item["tag"] in tags:
-            names.append(str(item["name"]))
-    return sorted(names)
+        tag = str(item["tag"])
+        catalog[tag] = str(item["name"])
+    return catalog
+
+
+def _source_areas(
+    manifest: ModuleType,
+    *,
+    suite: str | None,
+    group: str | None,
+    family: str | None,
+    selected_files: set[str],
+) -> list[str]:
+    if family:
+        targets = tuple(manifest.COVERAGE_FAMILIES[family]["cov_targets"])
+        return sorted(str(item) for item in targets)
+
+    inferred: set[str] = set()
+    for family_name, meta in manifest.COVERAGE_FAMILIES.items():
+        family_files = set(meta["files"])
+        if selected_files & family_files:
+            inferred.update(str(item) for item in meta["cov_targets"])
+
+    if suite and suite in SUITE_SOURCE_AREAS:
+        inferred.update(SUITE_SOURCE_AREAS[suite])
+    if group:
+        inferred.update(SUITE_SOURCE_AREAS.get("deep_validation", ()))
+    return sorted(inferred)
 
 
 def _table(
@@ -59,53 +93,116 @@ def _strings(items: Iterable[object]) -> str:
     return ", ".join(values) if values else "-"
 
 
-def _write_summary(title: str, selected: list[object], manifest: ModuleType) -> str:
+def _selector_name(*, suite: str | None, group: str | None, family: str | None) -> str:
+    if suite:
+        return f"suite={suite}"
+    if group:
+        return f"group={group}"
+    if family:
+        return f"family={family}"
+    return "selector=unknown"
+
+
+def _write_summary(
+    title: str,
+    selected: list[object],
+    manifest: ModuleType,
+    *,
+    suite: str | None,
+    group: str | None,
+    family: str | None,
+) -> str:
     tags: set[str] = set()
     tiers: set[str] = set()
+    files: set[str] = set()
     tests: list[tuple[str, str, str, str]] = []
+    detailed: list[tuple[str, str, str]] = []
+    tag_names = _capability_catalog(manifest)
+
     for contract in selected:
+        path = str(getattr(contract, "path"))
+        files.add(path)
         contract_tags = tuple(getattr(contract, "capability_tags", ()))
         contract_markers = tuple(getattr(contract, "extra_markers", ()))
         tags.update(contract_tags)
         tiers.add(str(getattr(contract, "primary_tier")))
         tests.append(
             (
-                str(getattr(contract, "path")),
+                path,
                 str(getattr(contract, "primary_tier")),
                 _strings(contract_markers),
                 _strings(contract_tags),
             )
         )
+        for tag in contract_tags:
+            detailed.append(
+                (path, tag_names.get(str(tag), str(tag)), _strings(contract_markers))
+            )
 
-    covered = _capability_names(manifest, tags)
+    covered = sorted(tag_names[tag] for tag in tags if tag in tag_names)
     all_names = [str(item["name"]) for item in manifest.CAPABILITY_CATALOG]
     not_covered = sorted(name for name in all_names if name not in covered)
+    source_areas = _source_areas(
+        manifest,
+        suite=suite,
+        group=group,
+        family=family,
+        selected_files=files,
+    )
 
-    lines = [f"# {title}", "", "## Summary", ""]
+    lines = [f"# {title}", "", "## High-level execution view", ""]
     _table(
         lines,
         ("Metric", "Value"),
         [
+            ("Selector", _selector_name(suite=suite, group=group, family=family)),
             ("Contract tiers", _strings(sorted(tiers))),
-            ("Test files", str(len(tests))),
-            ("Covered capabilities", str(len(covered))),
-            ("Not covered capabilities", str(len(not_covered))),
+            ("Selected test files", str(len(tests))),
+            ("Primary source/package areas exercised", str(len(source_areas))),
+            ("Capability areas covered by this selector", str(len(covered))),
+            ("Capability areas outside this selector", str(len(not_covered))),
         ],
     )
 
-    lines.extend(["", "## What was tested", ""])
+    lines.extend(["", "## Job-task executed and files used", ""])
+    _table(
+        lines,
+        ("Task slice", "Files used", "What this slice validates"),
+        [
+            (
+                _selector_name(suite=suite, group=group, family=family),
+                "<br>".join(sorted(files)) or "-",
+                "Executes the selected pytest contract set and reports the matching capability areas.",
+            )
+        ],
+    )
+
+    lines.extend(["", "## Selected source/package areas", ""])
+    _table(lines, ("Area",), [(item,) for item in source_areas])
+
+    lines.extend(["", "## Selected test files", ""])
     _table(lines, ("Test file", "Tier", "Markers", "Capability tags"), tests)
 
-    lines.extend(["", "## Covered by this job", ""])
-    _table(lines, ("Capability",), [(name,) for name in covered])
+    lines.extend(["", "## What was tested", ""])
+    _table(lines, ("Test file", "Capability area", "Markers"), detailed)
 
-    lines.extend(["", "## Not covered by this job", ""])
-    _table(lines, ("Capability",), [(name,) for name in not_covered])
+    lines.extend(["", "## Covered by this selector", ""])
+    _table(lines, ("Capability area",), [(name,) for name in covered])
+
+    lines.extend(["", "## Not covered by this selector", ""])
+    _table(lines, ("Capability area",), [(name,) for name in not_covered])
 
     lines.extend(["", "## Result interpretation", ""])
-    lines.append("- success: all tests in this scope passed")
-    lines.append("- failed: at least one test or gate in this scope failed")
-    lines.append("- skipped: intentionally out of scope for this selector")
+    lines.append("- success: all tests in this selector passed")
+    lines.append(
+        "- failed: at least one test or validation step in this selector failed"
+    )
+    lines.append(
+        "- skipped: selector was intentionally not executed in this workflow run"
+    )
+    lines.append(
+        "- note: the file and source-area lists describe the planned scope for this selector; runtime stack traces still come from the produced artifacts and logs"
+    )
     return "\n".join(lines) + "\n"
 
 
@@ -133,7 +230,14 @@ def main() -> None:
         group=args.group,
         family=args.family,
     )
-    text = _write_summary(args.title, selected, manifest)
+    text = _write_summary(
+        args.title,
+        selected,
+        manifest,
+        suite=args.suite,
+        group=args.group,
+        family=args.family,
+    )
     if args.output:
         out = Path(args.output)
         out.parent.mkdir(parents=True, exist_ok=True)

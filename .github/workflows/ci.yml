@@ -163,3 +163,57 @@ jobs:
       license-compliance-result: ${{ inputs.run_license_compliance && needs.license_compliance.result || 'skipped' }}
       run-url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       source-sha: ${{ github.sha }}
+
+  final_summary:
+    if: ${{ always() }}
+    needs:
+      - quality
+      - deep_validation
+      - airflow_suite
+      - identity_provider_integration
+      - fab_provider_validation
+      - nightly_compatibility
+      - external_real_validation
+      - license_compliance
+      - review_pr_gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Render final workflow summary
+        run: |
+          mkdir -p .ci-artifacts/final-summary
+          python scripts/ci/render_final_ci_summary.py \
+            --output-md .ci-artifacts/final-summary/ci-summary.md \
+            --output-json .ci-artifacts/final-summary/ci-summary.json \
+            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --source-sha "${{ github.sha }}" \
+            --quality-enabled true \
+            --quality-result "${{ needs.quality.result }}" \
+            --deep_validation-enabled "${{ inputs.run_deep_validation }}" \
+            --deep_validation-result "${{ inputs.run_deep_validation && needs.deep_validation.result || 'skipped' }}" \
+            --airflow_integration-enabled "${{ inputs.run_airflow }}" \
+            --airflow_integration-result "${{ inputs.run_airflow && needs.airflow_suite.result || 'skipped' }}" \
+            --identity_provider_integration-enabled "${{ inputs.run_idp_integration }}" \
+            --identity_provider_integration-result "${{ inputs.run_idp_integration && needs.identity_provider_integration.result || 'skipped' }}" \
+            --fab_provider_validation-enabled "${{ inputs.run_fab_provider_validation }}" \
+            --fab_provider_validation-result "${{ inputs.run_fab_provider_validation && needs.fab_provider_validation.result || 'skipped' }}" \
+            --nightly_compatibility-enabled "${{ inputs.run_nightly_compatibility }}" \
+            --nightly_compatibility-result "${{ inputs.run_nightly_compatibility && needs.nightly_compatibility.result || 'skipped' }}" \
+            --external_real_validation-enabled "${{ inputs.run_external_real_validation }}" \
+            --external_real_validation-result "${{ inputs.run_external_real_validation && needs.external_real_validation.result || 'skipped' }}" \
+            --license_compliance-enabled "${{ inputs.run_license_compliance }}" \
+            --license_compliance-result "${{ inputs.run_license_compliance && needs.license_compliance.result || 'skipped' }}"
+          cat .ci-artifacts/final-summary/ci-summary.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload final summary artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: final-ci-summary
+          path: .ci-artifacts/final-summary

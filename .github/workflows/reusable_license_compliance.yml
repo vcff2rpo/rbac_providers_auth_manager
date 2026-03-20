@@ -120,40 +120,55 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ inputs.python-version }}
-      - name: Install static security tooling
+      - name: Install Bandit
         run: |
           python -m pip install --upgrade pip setuptools wheel
-          python -m pip install bandit[toml]==1.8.6 gitleaks==0.0
-        continue-on-error: true
-      - name: Install Bandit and Gitleaks via binaries
-        run: |
           python -m pip install bandit[toml]==1.8.6
+      - name: Install Gitleaks binary
+        run: |
           curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.24.2/gitleaks_8.24.2_linux_x64.tar.gz -o /tmp/gitleaks.tar.gz
           tar -xzf /tmp/gitleaks.tar.gz -C /tmp
           sudo mv /tmp/gitleaks /usr/local/bin/gitleaks
-      - name: Run Bandit
+      - name: Run Bandit and capture exit code
         run: |
-          set -o pipefail
+          set +e
           mkdir -p .ci-artifacts/license
-          python -m bandit -q -r . -x tests,.ci-artifacts,ci_review -f txt -o .ci-artifacts/license/bandit.txt || true
-      - name: Run Gitleaks
+          python -m bandit -q -r . -x tests,.ci-artifacts,ci_review -f txt -o .ci-artifacts/license/bandit.txt
+          BANDIT_RC=$?
+          echo "bandit_rc=$BANDIT_RC" >> "$GITHUB_ENV"
+          set -e
+      - name: Run Gitleaks and capture exit code
         run: |
-          set -o pipefail
-          gitleaks detect --source . --config .gitleaks.toml --report-path .ci-artifacts/license/gitleaks.json --no-banner || true
+          set +e
+          gitleaks detect --source . --config .gitleaks.toml --report-path .ci-artifacts/license/gitleaks.json --no-banner
+          GITLEAKS_RC=$?
+          echo "gitleaks_rc=$GITLEAKS_RC" >> "$GITHUB_ENV"
+          set -e
       - name: Render static security summary
         run: |
           {
             echo "# Static security summary"
             echo
-            echo "- Bandit: see bandit.txt"
-            echo "- Gitleaks: see gitleaks.json"
+            echo "| Check | Exit code |"
+            echo "|---|---|"
+            echo "| Bandit | ${bandit_rc:-unknown} |"
+            echo "| Gitleaks | ${gitleaks_rc:-unknown} |"
+            echo
+            echo "Files produced: bandit.txt, gitleaks.json"
           } > .ci-artifacts/license/static-security.md
+          cat .ci-artifacts/license/static-security.md >> "$GITHUB_STEP_SUMMARY"
       - name: Upload static security artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: static-security
           path: .ci-artifacts/license
+      - name: Fail on security findings
+        run: |
+          if [ "${bandit_rc:-1}" != "0" ] || [ "${gitleaks_rc:-1}" != "0" ]; then
+            echo "Static security tooling reported findings."
+            exit 1
+          fi
 
   summary:
     name: license compliance summary
@@ -170,12 +185,12 @@ jobs:
           {
             echo "# License compliance lane"
             echo
-            echo "| Job | Result |"
-            echo "|---|---|"
-            echo "| requirements_usage | ${{ needs.requirements_usage.result }} |"
-            echo "| license_compliance | ${{ needs.license_compliance.result }} |"
-            echo "| sbom | ${{ needs.sbom.result }} |"
-            echo "| static_security | ${{ needs.static_security.result }} |"
+            echo "| Job | Executed | Result | What was checked |"
+            echo "|---|---|---|---|"
+            echo "| requirements_usage | [x] yes | ${{ needs.requirements_usage.result }} | requirements*.txt usage across workflows |"
+            echo "| license_compliance | [x] yes | ${{ needs.license_compliance.result }} | Apache distribution files, REUSE metadata, dependency license scan, source heuristic scan |"
+            echo "| sbom | [x] yes | ${{ needs.sbom.result }} | CycloneDX SBOM JSON/XML generation |"
+            echo "| static_security | [x] yes | ${{ needs.static_security.result }} | Bandit plus Gitleaks static scanning |"
           } >> "$GITHUB_STEP_SUMMARY"
           for result in "${{ needs.requirements_usage.result }}" "${{ needs.license_compliance.result }}" "${{ needs.sbom.result }}" "${{ needs.static_security.result }}"; do
             if [ "$result" != "success" ]; then

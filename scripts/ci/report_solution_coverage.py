@@ -6,6 +6,8 @@ import sys
 from pathlib import Path
 from types import ModuleType
 
+from ci_summary_catalog import SUPPLEMENTAL_AREAS, checkbox
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -24,8 +26,14 @@ def main() -> None:
         item for item in manifest.CAPABILITY_CATALOG if item["status"] == "covered"
     ]
     gaps = [item for item in manifest.CAPABILITY_CATALOG if item["status"] != "covered"]
-    total = len(manifest.CAPABILITY_CATALOG)
-    covered_count = len(covered)
+    supplemental_covered = [
+        item for item in SUPPLEMENTAL_AREAS if item["status"] == "covered"
+    ]
+    supplemental_gaps = [
+        item for item in SUPPLEMENTAL_AREAS if item["status"] != "covered"
+    ]
+    total = len(manifest.CAPABILITY_CATALOG) + len(SUPPLEMENTAL_AREAS)
+    covered_count = len(covered) + len(supplemental_covered)
     percent = round((covered_count / total) * 100, 1) if total else 0.0
 
     payload = {
@@ -34,6 +42,8 @@ def main() -> None:
         "coverage_percent": percent,
         "covered": covered,
         "gaps": gaps,
+        "supplemental_covered": supplemental_covered,
+        "supplemental_gaps": supplemental_gaps,
         "coverage_families": {
             family: {
                 "threshold": int(meta["threshold"]),
@@ -50,7 +60,7 @@ def main() -> None:
     lines = [
         "# Solution coverage report",
         "",
-        f"- covered capabilities: {covered_count}/{total}",
+        f"- covered capability areas: {covered_count}/{total}",
         f"- coverage percent: {percent}%",
         "",
         "## Coverage families and thresholds",
@@ -59,13 +69,27 @@ def main() -> None:
         f"- {family}: threshold {int(meta['threshold'])}% across {len(tuple(meta['files']))} file(s)"
         for family, meta in manifest.COVERAGE_FAMILIES.items()
     )
-    lines.extend(["", "## Covered capability areas"])
-    lines.extend(f"- {item['name']}" for item in covered)
-    lines.extend(["", "## Remaining gaps"])
-    if gaps:
-        lines.extend(f"- {item['name']}" for item in gaps)
+    lines.extend(["", "## Repository-level capability matrix", ""])
+    lines.append("| Tested in repository CI catalog | Capability area | Source |")
+    lines.append("|---|---|---|")
+    for item in covered:
+        lines.append(f"| {checkbox(True)} | {item['name']} | contract manifest |")
+    for item in gaps:
+        lines.append(f"| {checkbox(False)} | {item['name']} | contract manifest |")
+    for item in supplemental_covered:
+        lines.append(f"| {checkbox(True)} | {item['name']} | supplemental CI catalog |")
+    for item in supplemental_gaps:
+        lines.append(
+            f"| {checkbox(False)} | {item['name']} | supplemental CI catalog |"
+        )
+
+    lines.extend(["", "## Areas currently marked as not tested", ""])
+    if gaps or supplemental_gaps:
+        for item in [*gaps, *supplemental_gaps]:
+            lines.append(f"- {item['name']}")
     else:
         lines.append("- none")
+
     (artifact_dir / "solution-coverage.md").write_text(
         "\n".join(lines) + "\n",
         encoding="utf-8",
