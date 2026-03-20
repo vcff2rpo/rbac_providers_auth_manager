@@ -90,7 +90,7 @@ jobs:
       - name: Generate RBAC snapshot diff
         run: |
           set -o pipefail
-          python scripts/ci/validate_fab_mirror.py 2>&1 | tee "$NIGHTLY_ARTIFACT_DIR/rbac-snapshot.log"
+          python scripts/ci/validate_fab_mirror.py 2>&1 | tee "$NIGHTLY_ARTIFACT_DIR/fab-support-validation.log"
 
       - name: Run provider-backed mirror tests
         run: |

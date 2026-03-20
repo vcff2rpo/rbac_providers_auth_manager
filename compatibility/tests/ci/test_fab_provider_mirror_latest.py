@@ -7,7 +7,4 @@ from rbac_providers_auth_manager.compatibility.fab_provider_support import (
 
 def test_official_fab_provider_permissions_are_supported_by_plugin_design() -> None:
     report = build_support_report()
-    assert not report.has_blocking_gaps, (
-        "Official FAB provider permissions are not fully supported by the custom plugin design: "
-        f"{[gap.__dict__ for gap in report.unsupported_permissions]}"
-    )
+    assert not report.has_blocking_gaps
