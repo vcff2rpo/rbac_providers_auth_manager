@@ -28,6 +28,7 @@ from rbac_providers_auth_manager.authorization.vocabulary import (
     RESOURCE_DAG_VERSION,
     RESOURCE_DAG_WARNING,
     RESOURCE_DOCS,
+    RESOURCE_DOCS_MENU,
     RESOURCE_IMPORT_ERROR,
     RESOURCE_JOB,
     RESOURCE_MY_PASSWORD,
@@ -70,10 +71,10 @@ NON_ADMIN_RESOURCE_CONTRACTS: tuple[ResourceContract, ...] = (
     ),
     ResourceContract(
         RESOURCE_DOCS,
-        RESOURCE_DOCS,
+        RESOURCE_DOCS_MENU,
         "Viewer",
         (ACTION_CAN_READ,),
-        notes="Documentation UI surface.",
+        notes="Documentation UI surface is anchored under the Docs menu.",
     ),
     ResourceContract(
         RESOURCE_MY_PROFILE,

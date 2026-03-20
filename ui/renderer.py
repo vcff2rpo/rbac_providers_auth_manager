@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import html
-from pathlib import Path
+from importlib import resources
 from string import Template
 from typing import Any
 from urllib.parse import quote
@@ -50,9 +50,7 @@ class UIRenderer:
 
     def __init__(self, manager: Any) -> None:
         self.manager = manager
-        self._base_dir = Path(__file__).resolve().parent
-        self._template_dir = self._base_dir / "templates"
-        self._static_dir = self._base_dir / "static"
+        self._ui_package = resources.files("rbac_providers_auth_manager.ui")
         self._status_presenter = LoginStatusPresenter(manager)
 
     @property
@@ -342,13 +340,17 @@ class UIRenderer:
     def _render_template(self, template_name: str, **context: str) -> str:
         """Render a file-backed HTML template using a string-safe mapping."""
         template = Template(
-            (self._template_dir / template_name).read_text(encoding="utf-8")
+            self._read_ui_resource(f"templates/{template_name}")
         )
         return template.safe_substitute(context)
 
     def _load_auth_css(self) -> str:
         """Return the shared auth page stylesheet contents."""
-        return (self._static_dir / "auth.css").read_text(encoding="utf-8")
+        return self._read_ui_resource("static/auth.css")
+
+    def _read_ui_resource(self, relative_path: str) -> str:
+        """Read a packaged UI resource from the installed package."""
+        return self._ui_package.joinpath(relative_path).read_text(encoding="utf-8")
 
     def _render_help_panel(self, *, ldap_enabled: bool, entra_enabled: bool) -> str:
         """Return the right-side help panel for the login page."""
