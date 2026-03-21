@@ -24,3 +24,4 @@ Current load-config coverage includes:
 - UI status customization
 - role filters
 - self-signed LDAP override guardrails
+- role-filter runtime variants and scoped multi-role enforcement

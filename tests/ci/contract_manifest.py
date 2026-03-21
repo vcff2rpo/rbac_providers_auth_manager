@@ -160,6 +160,12 @@ CONTRACTS: Final[tuple[TestContract, ...]] = (
         ),
     ),
     TestContract(
+        "tests/ci/test_role_filter_runtime_matrix.py",
+        "unit",
+        "quality",
+        capability_tags=("role_filter_runtime_enforcement",),
+    ),
+    TestContract(
         "tests/ci/test_auth_mode_startup_matrix.py",
         "unit",
         "quality",
@@ -497,6 +503,11 @@ CAPABILITY_CATALOG: Final[tuple[dict[str, object], ...]] = (
     {
         "name": "Role-filter configuration parsing",
         "tag": "role_filter_config",
+        "status": "covered",
+    },
+    {
+        "name": "Role-filter runtime enforcement",
+        "tag": "role_filter_runtime_enforcement",
         "status": "covered",
     },
     {

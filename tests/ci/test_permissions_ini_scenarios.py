@@ -14,6 +14,7 @@ from .permissions_fixture_loader import (
     apply_env,
     case_metadata,
     fixture_cases,
+    load_config_case,
     resolve_attr_path,
 )
 
@@ -36,9 +37,9 @@ def test_permissions_ini_load_config_scenarios(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     metadata = case_metadata(case_path)
-    apply_env(metadata, monkeypatch)
 
     if metadata["expect"] == "error":
+        apply_env(metadata, monkeypatch)
         error_type = metadata.get("error_type", "SecurityConfigError")
         exc_type: type[Exception]
         if error_type == "SecurityConfigError":
@@ -49,7 +50,7 @@ def test_permissions_ini_load_config_scenarios(
             load_config(case_path)
         return
 
-    cfg = load_config(case_path)
+    _, _, cfg = load_config_case(case_path.name, monkeypatch)
     for dotted_path, expected in metadata.get("assertions", {}).items():
         actual = resolve_attr_path(cfg, str(dotted_path))
         if dotted_path == "jwt_cookie.cookie_samesite":
