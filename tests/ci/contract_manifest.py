@@ -142,6 +142,16 @@ CONTRACTS: Final[tuple[TestContract, ...]] = (
         ),
     ),
     TestContract(
+        "tests/ci/test_auth_mode_startup_matrix.py",
+        "unit",
+        "quality",
+        capability_tags=(
+            "auth_mode_startup_matrix",
+            "provider_readiness_payloads",
+            "wildcard_permissions_runtime",
+        ),
+    ),
+    TestContract(
         "tests/ci/test_runtime_negative_paths.py",
         "idp_runtime",
         "quality",
@@ -153,6 +163,15 @@ CONTRACTS: Final[tuple[TestContract, ...]] = (
         "unit",
         "quality",
         capability_tags=("security_logging",),
+    ),
+    TestContract(
+        "tests/ci/test_provider_runtime_startup_logging.py",
+        "unit",
+        "quality",
+        capability_tags=(
+            "provider_disabled_logging",
+            "reload_recovery_logging",
+        ),
     ),
     TestContract(
         "tests/ci/test_runtime_smoke.py",
@@ -274,6 +293,7 @@ DEEP_VALIDATION_GROUPS: Final[dict[str, tuple[str, ...]]] = {
         "tests/ci/test_config_matrix.py",
         "tests/ci/test_config_runtime.py",
         "tests/ci/test_permissions_ini_scenarios.py",
+        "tests/ci/test_auth_mode_startup_matrix.py",
         "tests/ci/test_runtime_smoke.py",
         "tests/ci/test_core_helpers.py",
     ),
@@ -301,6 +321,7 @@ DEEP_VALIDATION_GROUPS: Final[dict[str, tuple[str, ...]]] = {
     ),
     "audit-logging-governance": (
         "tests/ci/test_runtime_security_and_logging.py",
+        "tests/ci/test_provider_runtime_startup_logging.py",
         "tests/ci/test_audit_and_governance_reports.py",
         "tests/ci/test_audit_service_logging_matrix.py",
     ),
@@ -313,6 +334,7 @@ COVERAGE_FAMILIES: Final[dict[str, CoverageFamily]] = {
             "tests/ci/test_config_matrix.py",
             "tests/ci/test_config_runtime.py",
             "tests/ci/test_permissions_ini_scenarios.py",
+            "tests/ci/test_auth_mode_startup_matrix.py",
             "tests/ci/test_runtime_smoke.py",
             "tests/ci/test_core_helpers.py",
         ),
@@ -321,6 +343,8 @@ COVERAGE_FAMILIES: Final[dict[str, CoverageFamily]] = {
             "rbac_providers_auth_manager.config_runtime",
             "rbac_providers_auth_manager.core",
             "rbac_providers_auth_manager.runtime",
+            "rbac_providers_auth_manager.services.flow_payloads",
+            "rbac_providers_auth_manager.ui.status_presenter",
         ),
     },
     "role-mapping-rbac-compatibility": {
@@ -392,12 +416,14 @@ COVERAGE_FAMILIES: Final[dict[str, CoverageFamily]] = {
         "threshold": 35,
         "files": (
             "tests/ci/test_runtime_security_and_logging.py",
+            "tests/ci/test_provider_runtime_startup_logging.py",
             "tests/ci/test_audit_and_governance_reports.py",
             "tests/ci/test_audit_service_logging_matrix.py",
         ),
         "cov_targets": (
             "rbac_providers_auth_manager.services.audit_schema",
             "rbac_providers_auth_manager.services.audit_service",
+            "rbac_providers_auth_manager.services.provider_runtime_service",
             "rbac_providers_auth_manager.runtime.compat_governance",
             "rbac_providers_auth_manager.runtime.version_policy",
             "rbac_providers_auth_manager.runtime.security",
@@ -628,6 +654,31 @@ CAPABILITY_CATALOG: Final[tuple[dict[str, object], ...]] = (
     {
         "name": "permissions.ini fixture corpus and parametrized scenario tests",
         "tag": "permissions_fixture_corpus",
+        "status": "covered",
+    },
+    {
+        "name": "Auth-mode startup matrix across LDAP, Entra, and dual-provider configs",
+        "tag": "auth_mode_startup_matrix",
+        "status": "covered",
+    },
+    {
+        "name": "Provider readiness payloads for startup/login surfaces",
+        "tag": "provider_readiness_payloads",
+        "status": "covered",
+    },
+    {
+        "name": "Wildcard permission runtime behavior",
+        "tag": "wildcard_permissions_runtime",
+        "status": "covered",
+    },
+    {
+        "name": "Provider-disabled startup logging",
+        "tag": "provider_disabled_logging",
+        "status": "covered",
+    },
+    {
+        "name": "Reload recovery logging",
+        "tag": "reload_recovery_logging",
         "status": "covered",
     },
     {
