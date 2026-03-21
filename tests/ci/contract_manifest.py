@@ -38,6 +38,17 @@ CONTRACTS: Final[tuple[TestContract, ...]] = (
         ("api_surface_contracts",),
     ),
     TestContract(
+        "tests/ci/test_api_observability_matrix.py",
+        "idp_runtime",
+        "quality",
+        ("slow",),
+        (
+            "api_observability_logging",
+            "oauth_rate_limit_flow",
+            "browser_failure_audit",
+        ),
+    ),
+    TestContract(
         "tests/ci/test_browser_token_flow_matrix.py",
         "idp_runtime",
         "quality",
@@ -117,7 +128,12 @@ CONTRACTS: Final[tuple[TestContract, ...]] = (
         "tests/ci/test_permissions_ini_scenarios.py",
         "unit",
         "quality",
-        capability_tags=("permissions_ini_matrix", "permissions_fixture_corpus"),
+        capability_tags=(
+            "permissions_ini_matrix",
+            "permissions_fixture_corpus",
+            "role_filter_config",
+            "ui_status_customization_config",
+        ),
     ),
     TestContract(
         "tests/ci/test_runtime_negative_paths.py",
@@ -218,58 +234,57 @@ CONTRACTS: Final[tuple[TestContract, ...]] = (
 )
 
 DEEP_VALIDATION_GROUPS: Final[dict[str, tuple[str, ...]]] = {
-    "config-runtime-security-governance": (
+    "config-permissions-runtime": (
         "tests/ci/test_config_matrix.py",
         "tests/ci/test_config_runtime.py",
         "tests/ci/test_permissions_ini_scenarios.py",
-        "tests/ci/test_runtime_security_and_logging.py",
         "tests/ci/test_runtime_smoke.py",
-        "tests/ci/test_audit_and_governance_reports.py",
         "tests/ci/test_core_helpers.py",
     ),
-    "authorization-rbac-compatibility": (
+    "role-mapping-rbac-compatibility": (
         "tests/ci/test_authorization_policy.py",
         "tests/ci/test_fab_role_static_mirror.py",
         "tests/ci/test_identity_mapping_matrix.py",
         "tests/ci/test_role_vocabulary_drift_guard.py",
     ),
-    "api-ui-browser-session": (
+    "api-ui-browser-session-observability": (
         "tests/ci/test_api_surface_contracts.py",
+        "tests/ci/test_api_observability_matrix.py",
         "tests/ci/test_browser_token_flow_matrix.py",
         "tests/ci/test_runtime_negative_paths.py",
         "tests/ci/test_redirect_and_session_services.py",
         "tests/ci/test_ui_status_components.py",
     ),
-    "identity-provider-runtime-backends": (
+    "provider-backends-and-rate-limits": (
         "tests/ci/test_ldap_backend_simulation.py",
         "tests/ci/test_entra_backend_simulation.py",
         "tests/ci/test_entra_browser_flow_integration.py",
         "tests/ci/test_runtime_backends.py",
     ),
+    "audit-logging-governance": (
+        "tests/ci/test_runtime_security_and_logging.py",
+        "tests/ci/test_audit_and_governance_reports.py",
+    ),
 }
 
 COVERAGE_FAMILIES: Final[dict[str, CoverageFamily]] = {
-    "config-runtime-security-governance": {
+    "config-permissions-runtime": {
         "threshold": 45,
         "files": (
             "tests/ci/test_config_matrix.py",
             "tests/ci/test_config_runtime.py",
             "tests/ci/test_permissions_ini_scenarios.py",
-            "tests/ci/test_runtime_security_and_logging.py",
             "tests/ci/test_runtime_smoke.py",
-            "tests/ci/test_audit_and_governance_reports.py",
             "tests/ci/test_core_helpers.py",
         ),
         "cov_targets": (
             "rbac_providers_auth_manager.config",
             "rbac_providers_auth_manager.config_runtime",
-            "rbac_providers_auth_manager.runtime",
             "rbac_providers_auth_manager.core",
-            "rbac_providers_auth_manager.services.audit_schema",
-            "rbac_providers_auth_manager.services.audit_service",
+            "rbac_providers_auth_manager.runtime",
         ),
     },
-    "authorization-rbac-compatibility": {
+    "role-mapping-rbac-compatibility": {
         "threshold": 35,
         "files": (
             "tests/ci/test_authorization_policy.py",
@@ -283,10 +298,11 @@ COVERAGE_FAMILIES: Final[dict[str, CoverageFamily]] = {
             "rbac_providers_auth_manager.identity",
         ),
     },
-    "api-ui-browser-session": {
+    "api-ui-browser-session-observability": {
         "threshold": 35,
         "files": (
             "tests/ci/test_api_surface_contracts.py",
+            "tests/ci/test_api_observability_matrix.py",
             "tests/ci/test_browser_token_flow_matrix.py",
             "tests/ci/test_runtime_negative_paths.py",
             "tests/ci/test_redirect_and_session_services.py",
@@ -297,8 +313,12 @@ COVERAGE_FAMILIES: Final[dict[str, CoverageFamily]] = {
             "rbac_providers_auth_manager.api.routes",
             "rbac_providers_auth_manager.api.routes_api",
             "rbac_providers_auth_manager.entrypoints.auth_manager",
+            "rbac_providers_auth_manager.services.auth_flow_service",
+            "rbac_providers_auth_manager.services.browser_flow_service",
             "rbac_providers_auth_manager.services.entrypoint_app_service",
             "rbac_providers_auth_manager.services.flow_payloads",
+            "rbac_providers_auth_manager.services.ldap_browser_flow_service",
+            "rbac_providers_auth_manager.services.oauth_browser_flow_service",
             "rbac_providers_auth_manager.services.redirect_service",
             "rbac_providers_auth_manager.services.runtime_context_service",
             "rbac_providers_auth_manager.services.session_service",
@@ -310,7 +330,7 @@ COVERAGE_FAMILIES: Final[dict[str, CoverageFamily]] = {
             "rbac_providers_auth_manager.ui.status_query_service",
         ),
     },
-    "identity-provider-runtime-backends": {
+    "provider-backends-and-rate-limits": {
         "threshold": 35,
         "files": (
             "tests/ci/test_ldap_backend_simulation.py",
@@ -325,6 +345,20 @@ COVERAGE_FAMILIES: Final[dict[str, CoverageFamily]] = {
             "rbac_providers_auth_manager.runtime.auth_state_backends",
             "rbac_providers_auth_manager.runtime.rate_limit_backends",
             "rbac_providers_auth_manager.runtime.rate_limiter",
+        ),
+    },
+    "audit-logging-governance": {
+        "threshold": 35,
+        "files": (
+            "tests/ci/test_runtime_security_and_logging.py",
+            "tests/ci/test_audit_and_governance_reports.py",
+        ),
+        "cov_targets": (
+            "rbac_providers_auth_manager.services.audit_schema",
+            "rbac_providers_auth_manager.services.audit_service",
+            "rbac_providers_auth_manager.runtime.compat_governance",
+            "rbac_providers_auth_manager.runtime.version_policy",
+            "rbac_providers_auth_manager.runtime.security",
         ),
     },
     "bootstrap-imports": {
@@ -350,10 +384,25 @@ CAPABILITY_CATALOG: Final[tuple[dict[str, object], ...]] = (
         "tag": "permissions_ini_matrix",
         "status": "covered",
     },
+    {
+        "name": "Role-filter configuration parsing",
+        "tag": "role_filter_config",
+        "status": "covered",
+    },
+    {
+        "name": "UI status text customization from permissions.ini",
+        "tag": "ui_status_customization_config",
+        "status": "covered",
+    },
     {"name": "RBAC authorization policy", "tag": "rbac_policy", "status": "covered"},
     {
         "name": "API surface contracts (HTML, JSON, cookie behavior)",
         "tag": "api_surface_contracts",
+        "status": "covered",
+    },
+    {
+        "name": "API observability, status payloads, and audit logging",
+        "tag": "api_observability_logging",
         "status": "covered",
     },
     {
@@ -410,6 +459,11 @@ CAPABILITY_CATALOG: Final[tuple[dict[str, object], ...]] = (
         "status": "covered",
     },
     {
+        "name": "OAuth/browser rate-limit flow handling",
+        "tag": "oauth_rate_limit_flow",
+        "status": "covered",
+    },
+    {
         "name": "Session flow-state persistence",
         "tag": "session_flow_state",
         "status": "covered",
@@ -432,6 +486,11 @@ CAPABILITY_CATALOG: Final[tuple[dict[str, object], ...]] = (
     {
         "name": "Structured audit payload and event emission",
         "tag": "audit_service",
+        "status": "covered",
+    },
+    {
+        "name": "Browser/API failure audit event mapping",
+        "tag": "browser_failure_audit",
         "status": "covered",
     },
     {

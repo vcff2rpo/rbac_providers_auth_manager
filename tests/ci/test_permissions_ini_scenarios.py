@@ -22,7 +22,10 @@ def _case_metadata(case_path: Path) -> dict[str, Any]:
 def _resolve_attr_path(obj: object, dotted_path: str) -> object:
     current = obj
     for part in dotted_path.split("."):
-        current = getattr(current, part)
+        if isinstance(current, dict):
+            current = current[part]
+        else:
+            current = getattr(current, part)
     return current
 
 
@@ -69,6 +72,8 @@ def test_permissions_ini_load_config_scenarios(
         actual = _resolve_attr_path(cfg, str(dotted_path))
         if dotted_path == "jwt_cookie.cookie_samesite":
             assert str(actual).lower() == str(expected)
+        elif isinstance(actual, tuple) and isinstance(expected, list):
+            assert list(actual) == expected
         else:
             assert actual == expected
 

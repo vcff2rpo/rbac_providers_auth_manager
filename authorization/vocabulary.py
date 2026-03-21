@@ -27,7 +27,7 @@ RESOURCE_TASK_RESCHEDULE = "Task Reschedules"
 RESOURCE_XCOM = "XComs"
 
 RESOURCE_MY_PROFILE = "My Profile"
-RESOURCE_MY_PASSWORD = "My Password"
+RESOURCE_MY_PASSWORD = "My Password"  # nosec B105 - UI resource label, not a credential
 
 RESOURCE_POOL = "Pools"
 RESOURCE_CONNECTION = "Connections"

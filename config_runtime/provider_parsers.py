@@ -193,7 +193,7 @@ def parse_entra_id(
     client_id = get_any(parser, sections, ["client_id"], "") or ""
 
     client_secret_ref = get_any(parser, sections, ["client_secret"], "") or ""
-    client_secret = ""
+    client_secret = ""  # nosec B105 - populated from config/secret reference at runtime
     if client_secret_ref:
         resolved_secret = resolve_secret_reference(
             client_secret_ref,

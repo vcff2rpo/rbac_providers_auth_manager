@@ -3,12 +3,15 @@ from __future__ import annotations
 from dataclasses import replace
 from http.cookies import SimpleCookie
 import importlib
+from typing import Any
 
 import pytest
 from fastapi import Response
 from starlette.requests import Request
 
-_FAKE_AIRFLOW = importlib.import_module("tests.ci._fake_airflow")
+from ._fake_airflow import install_fake_airflow
+
+install_fake_airflow()
 
 RedirectService = importlib.import_module(
     "rbac_providers_auth_manager.services.redirect_service"
@@ -19,11 +22,13 @@ RuntimeContextService = importlib.import_module(
 SessionService = importlib.import_module(
     "rbac_providers_auth_manager.services.session_service"
 ).SessionService
-browser_matrix = importlib.import_module("tests.ci.test_browser_token_flow_matrix")
+browser_matrix = importlib.import_module(
+    ".test_browser_token_flow_matrix", package=__package__
+)
 
 
 class _CfgLoader:
-    def __init__(self, cfg) -> None:
+    def __init__(self, cfg: Any) -> None:
         self._cfg = cfg
 
     def get_config(self):
@@ -48,7 +53,7 @@ class _RedirectService:
 
 
 class _Manager:
-    def __init__(self, cfg) -> None:
+    def __init__(self, cfg: Any) -> None:
         self._cfg_loader = _CfgLoader(cfg)
         self._config_error_message = ""
         self._session_service = SessionService(

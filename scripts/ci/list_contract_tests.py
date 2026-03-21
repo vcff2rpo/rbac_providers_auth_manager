@@ -23,10 +23,11 @@ SUITES = [
     "external_real_validation",
 ]
 GROUPS = [
-    "config-runtime-security-governance",
-    "authorization-rbac-compatibility",
-    "api-ui-browser-session",
-    "identity-provider-runtime-backends",
+    "config-permissions-runtime",
+    "role-mapping-rbac-compatibility",
+    "api-ui-browser-session-observability",
+    "provider-backends-and-rate-limits",
+    "audit-logging-governance",
 ]
 
 

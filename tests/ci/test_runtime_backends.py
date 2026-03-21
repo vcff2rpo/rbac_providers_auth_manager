@@ -3,12 +3,15 @@ from __future__ import annotations
 from dataclasses import replace
 from http.cookies import SimpleCookie
 import importlib
+from typing import Any, cast
 
 import pytest
 from fastapi import Response
 from starlette.requests import Request
 
-_FAKE_AIRFLOW = importlib.import_module("tests.ci._fake_airflow")
+from ._fake_airflow import install_fake_airflow
+
+install_fake_airflow()
 
 OAuthFlowState = importlib.import_module(
     "rbac_providers_auth_manager.identity.models"
@@ -25,10 +28,15 @@ build_rate_limiter = _rate_limit_backends.build_rate_limiter
 SlidingWindowRateLimiter = importlib.import_module(
     "rbac_providers_auth_manager.runtime.rate_limiter"
 ).SlidingWindowRateLimiter
-SessionService = importlib.import_module(
-    "rbac_providers_auth_manager.services.session_service"
-).SessionService
-browser_matrix = importlib.import_module("tests.ci.test_browser_token_flow_matrix")
+SessionService = cast(
+    Any,
+    importlib.import_module(
+        "rbac_providers_auth_manager.services.session_service"
+    ).SessionService,
+)
+browser_matrix = importlib.import_module(
+    ".test_browser_token_flow_matrix", package=__package__
+)
 
 
 class _Clock:
@@ -74,7 +82,7 @@ def auth_cfg():
 
 
 @pytest.fixture()
-def session_service(auth_cfg):
+def session_service(auth_cfg) -> Any:
     return SessionService(
         config_loader=_CfgLoader(auth_cfg),
         redirect_service=_RedirectService(),
@@ -192,7 +200,7 @@ def test_build_rate_limiter_memory_and_unknown_backend() -> None:
 
 @pytest.mark.unit
 def test_session_service_persists_and_loads_memory_backed_flow_state(
-    session_service: SessionService,
+    session_service: Any,
     auth_cfg,
 ) -> None:
     cfg = replace(

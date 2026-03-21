@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import xml.etree.ElementTree as ET
+from defusedxml import ElementTree as ET  # type: ignore[import-untyped]
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
@@ -60,7 +60,7 @@ def _read_junit_summary(path: Path) -> dict[str, int] | None:
         return None
     try:
         root = ET.fromstring(path.read_text(encoding="utf-8", errors="replace"))
-    except (ET.ParseError, OSError):
+    except (ET.ParseError, OSError, ValueError):
         return None
 
     suites = [root] if root.tag == "testsuite" else root.findall(".//testsuite")

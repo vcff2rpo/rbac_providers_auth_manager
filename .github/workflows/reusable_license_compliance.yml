@@ -109,6 +109,34 @@ jobs:
           name: release-readiness
           path: ${{ env.LICENSE_ARTIFACT_DIR }}
 
+  build_distribution:
+    name: build distribution
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ inputs.python-version }}
+      - name: Build sdist and wheel
+        run: |
+          set -o pipefail
+          mkdir -p "$LICENSE_ARTIFACT_DIR"
+          python -m pip install --upgrade pip setuptools wheel build==1.3.0
+          python -m build --sdist --wheel . 2>&1 | tee "$LICENSE_ARTIFACT_DIR/build-distribution.log"
+          ls -1 dist > "$LICENSE_ARTIFACT_DIR/build-distribution-files.txt"
+      - name: Upload build artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-distribution
+          path: |
+            ${{ env.LICENSE_ARTIFACT_DIR }}/build-distribution.log
+            ${{ env.LICENSE_ARTIFACT_DIR }}/build-distribution-files.txt
+            dist/*
+
   sbom:
     name: sbom
     runs-on: ubuntu-latest
@@ -156,7 +184,7 @@ jobs:
       - name: Install static security tooling
         run: |
           python -m pip install --upgrade pip setuptools wheel
-          python -m pip install bandit[toml]==1.8.6
+          python -m pip install bandit[toml]==1.8.6 build==1.3.0
       - name: Install Gitleaks binary
         run: |
           curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.24.2/gitleaks_8.24.2_linux_x64.tar.gz -o /tmp/gitleaks.tar.gz
@@ -166,7 +194,7 @@ jobs:
         run: |
           set +e
           mkdir -p "$LICENSE_ARTIFACT_DIR"
-          python -m bandit -q -r . -x .ci-artifacts,ci_review -f txt -o "$LICENSE_ARTIFACT_DIR/bandit.txt"
+          python -m bandit -q -r . -x tests,scripts,.ci-artifacts,ci_review -c pyproject.toml -f txt -o "$LICENSE_ARTIFACT_DIR/bandit.txt"
           BANDIT_RC=$?
           echo "bandit_rc=$BANDIT_RC" >> "$GITHUB_ENV"
           set -e
@@ -208,6 +236,7 @@ jobs:
       - requirements_usage
       - license_compliance
       - release_readiness
+      - build_distribution
       - sbom
       - static_security
     steps:
@@ -221,6 +250,7 @@ jobs:
             echo "| requirements_usage | [x] yes | ${{ needs.requirements_usage.result }} | requirements*.txt, .github/workflows/*.yml | requirements file usage across workflows |"
             echo "| license_compliance | [x] yes | ${{ needs.license_compliance.result }} | LICENSE, NOTICE, REUSE.toml, LICENSES/Apache-2.0.txt, repository sources | Apache distribution files, REUSE metadata, dependency license scan, source heuristic scan |"
             echo "| release_readiness | [x] yes | ${{ needs.release_readiness.result }} | README.md, py.typed, pyproject.toml/setup.py, repository hygiene | release-readiness and committed cache/build-artefact checks |"
+            echo "| build_distribution | [x] yes | ${{ needs.build_distribution.result }} | pyproject.toml, setup.py, repository sources | sdist and wheel build smoke for release packaging |"
             echo "| sbom | [x] yes | ${{ needs.sbom.result }} | installed environment | CycloneDX SBOM JSON/XML generation |"
             echo "| static_security | [x] yes | ${{ needs.static_security.result }} | repository sources, .gitleaks.toml | Bandit plus Gitleaks static scanning with finding summary |"
           } >> "$GITHUB_STEP_SUMMARY"
@@ -228,6 +258,7 @@ jobs:
             "${{ needs.requirements_usage.result }}" \
             "${{ needs.license_compliance.result }}" \
             "${{ needs.release_readiness.result }}" \
+            "${{ needs.build_distribution.result }}" \
             "${{ needs.sbom.result }}" \
             "${{ needs.static_security.result }}"
           do

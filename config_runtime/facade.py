@@ -111,7 +111,10 @@ class ConfigLoader:
         with self._lock:
             if self._cfg is None:
                 self._reload(force=True)
-                assert self._cfg is not None
+                if self._cfg is None:
+                    raise RuntimeError(
+                        "Configuration reload completed without a loaded configuration"
+                    )
                 return self._cfg
 
             reload_seconds = max(0, int(self._cfg.general.config_reload_seconds))
@@ -122,7 +125,10 @@ class ConfigLoader:
                 return self._cfg
 
             self._reload(force=False)
-            assert self._cfg is not None
+            if self._cfg is None:
+                raise RuntimeError(
+                    "Configuration reload completed without a loaded configuration"
+                )
             return self._cfg
 
     def _reload(self, force: bool) -> None:

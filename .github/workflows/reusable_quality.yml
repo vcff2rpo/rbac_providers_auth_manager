@@ -171,10 +171,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - family: config-runtime-security-governance
-          - family: authorization-rbac-compatibility
-          - family: api-ui-browser-session
-          - family: identity-provider-runtime-backends
+          - family: config-permissions-runtime
+          - family: role-mapping-rbac-compatibility
+          - family: api-ui-browser-session-observability
+          - family: provider-backends-and-rate-limits
+          - family: audit-logging-governance
           - family: bootstrap-imports
     steps:
       - uses: actions/checkout@v6
@@ -203,7 +204,7 @@ jobs:
             --output "$QUALITY_ARTIFACT_DIR/family-${{ matrix.family }}-scope.md"
           cat "$QUALITY_ARTIFACT_DIR/family-${{ matrix.family }}-scope.md" >> "$GITHUB_STEP_SUMMARY"
       - name: Install official FAB provider for rbac-mirror family
-        if: ${{ matrix.family == 'authorization-rbac-compatibility' }}
+        if: ${{ matrix.family == 'role-mapping-rbac-compatibility' }}
         run: |
           set -euo pipefail
           AIRFLOW_CONSTRAINTS_URL="https://raw.githubusercontent.com/apache/airflow/constraints-3.1.8/constraints-3.13.txt"
@@ -212,8 +213,8 @@ jobs:
           python -m pip install "apache-airflow-providers-fab==3.5.0"
           python -m pip install -r requirements-fab-provider-validation.txt
           python -m pip check
-      - name: Generate official FAB vs plugin support tables for authorization-rbac-compatibility family
-        if: ${{ matrix.family == 'authorization-rbac-compatibility' }}
+      - name: Generate official FAB vs plugin support tables for role-mapping-rbac-compatibility family
+        if: ${{ matrix.family == 'role-mapping-rbac-compatibility' }}
         run: |
           set +e
           python scripts/ci/validate_fab_mirror.py --artifact-dir "$QUALITY_ARTIFACT_DIR" 2>&1 | tee "$QUALITY_ARTIFACT_DIR/fab-support-validation.log"
@@ -363,7 +364,7 @@ jobs:
             echo "| ruff_format | [x] yes | ${{ needs.ruff_format.result }} | repository Python sources, tests/ci, scripts/ci | formatting compliance |"
             echo "| mypy_package | [x] yes | ${{ needs.mypy_package.result }} | rbac_providers_auth_manager/** | package typing surface |"
             echo "| mypy_tests | [x] yes | ${{ needs.mypy_tests.result }} | tests/ci/**/*.py, scripts/ci/**/*.py | CI test and helper typing surface |"
-            echo "| pytest_family_coverage | [x] yes | ${{ needs.pytest_family_coverage.result }} | config-runtime-security-governance, authorization-rbac-compatibility, api-ui-browser-session, identity-provider-runtime-backends, bootstrap-imports | functional contract coverage by plugin area |"
+            echo "| pytest_family_coverage | [x] yes | ${{ needs.pytest_family_coverage.result }} | config-permissions-runtime, role-mapping-rbac-compatibility, api-ui-browser-session-observability, provider-backends-and-rate-limits, audit-logging-governance, bootstrap-imports | functional contract coverage by plugin area |"
             echo "| pip_audit | [x] yes | ${{ needs.pip_audit.result }} | installed dependency environment | known Python package vulnerabilities |"
             echo "| summarize_quality | [x] yes | ${{ needs.summarize_quality.result }} | quality artifacts | artifact-level evidence synthesis |"
             echo

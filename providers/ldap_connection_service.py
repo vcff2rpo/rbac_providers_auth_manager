@@ -107,17 +107,23 @@ class LdapConnectionService:
                 ldap.OPT_NETWORK_TIMEOUT, float(self.cfg.network_timeout_seconds)
             )
         except Exception:  # noqa: BLE001
-            pass
+            log.debug(
+                "LDAP library does not accept network timeout option", exc_info=True
+            )
         try:
             conn.set_option(ldap.OPT_TIMEOUT, float(self.cfg.operation_timeout_seconds))
         except Exception:  # noqa: BLE001
-            pass
+            log.debug(
+                "LDAP library does not accept operation timeout option", exc_info=True
+            )
         try:
             conn.set_option(
                 ldap.OPT_CONNECT_TIMEOUT, int(self.cfg.connect_timeout_seconds)
             )
         except Exception:  # noqa: BLE001
-            pass
+            log.debug(
+                "LDAP library does not accept connect timeout option", exc_info=True
+            )
 
         if self.cfg.start_tls:
             try:

@@ -31,7 +31,10 @@ class LdapIdentityMapper:
         """Return mapped Airflow roles for a normalized LDAP identity."""
         cfg = self._manager._cfg_loader.get_config()
         policy = self._manager._policy
-        assert policy is not None
+        if policy is None:
+            raise RuntimeError(
+                "LDAP identity mapping requires an initialized authorization policy"
+            )
 
         mapping_hits: list[tuple[str, tuple[str, ...]]] = []
         roles_raw: set[str] = set()

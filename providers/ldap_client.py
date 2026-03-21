@@ -39,7 +39,7 @@ class LdapClient:
             pattern=self.cfg.username_pattern,
             max_length=self.cfg.username_max_length,
         )
-        if password is None or password == "":
+        if not password:
             raise LdapAuthError("Missing password")
 
         ldap = ldap_module()
@@ -109,7 +109,9 @@ class LdapClient:
                 try:
                     conn.unbind_s()
                 except Exception:  # noqa: BLE001
-                    pass
+                    log.debug(
+                        "LDAP connection unbind failed during cleanup", exc_info=True
+                    )
 
 
 __all__ = ("LdapClient", "LdapUserInfo")

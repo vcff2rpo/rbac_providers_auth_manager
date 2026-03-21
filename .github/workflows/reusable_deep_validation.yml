@@ -114,10 +114,11 @@ jobs:
       matrix:
         python-version: ${{ fromJson(inputs['python-versions']) }}
         group-name:
-          - config-runtime-security-governance
-          - authorization-rbac-compatibility
-          - api-ui-browser-session
-          - identity-provider-runtime-backends
+          - config-permissions-runtime
+          - role-mapping-rbac-compatibility
+          - api-ui-browser-session-observability
+          - provider-backends-and-rate-limits
+          - audit-logging-governance
     env:
       PACKAGE_NAME: ${{ inputs['package-name'] }}
       PYTHONPATH: ${{ github.workspace }}/..
@@ -185,7 +186,7 @@ jobs:
           python -m pip install -r requirements-dev.txt
           python -m pip install vulture==2.14
           python -m pip check
-      - run: python -m vulture rbac_providers_auth_manager tests/ci scripts/ci --min-confidence 80
+      - run: python -m vulture . tests/ci scripts/ci --exclude .ci-artifacts,ci_review --min-confidence 80
 
   summary:
     name: deep validation summary
@@ -209,8 +210,8 @@ jobs:
             echo "|---|---|---|---|---|"
             echo "| test-catalog | [x] yes | ${{ needs.test-catalog.result }} | tests/ci/test_*.py, tests/ci/contract_manifest.py | every CI test file is assigned to exactly one lane |"
             echo "| compile-and-import-smoke | [x] yes | ${{ needs.compile-and-import-smoke.result }} | repository Python sources, tests/ci/test_import_smoke.py | compilation plus import smoke gate |"
-            echo "| unit-and-mock-tests | [x] yes | ${{ needs.unit-and-mock-tests.result }} | config-runtime-security-governance, authorization-rbac-compatibility, api-ui-browser-session, identity-provider-runtime-backends shards across Python matrix | deeper functional contracts with coverage |"
-            echo "| dead-code | [x] yes | ${{ needs.dead-code.result }} | rbac_providers_auth_manager/**, tests/ci/**/*.py, scripts/ci/**/*.py | dead or unreachable code detection |"
+            echo "| unit-and-mock-tests | [x] yes | ${{ needs.unit-and-mock-tests.result }} | config-permissions-runtime, role-mapping-rbac-compatibility, api-ui-browser-session-observability, provider-backends-and-rate-limits, audit-logging-governance shards across Python matrix | deeper functional contracts with coverage |"
+            echo "| dead-code | [x] yes | ${{ needs.dead-code.result }} | repository root package, tests/ci/**/*.py, scripts/ci/**/*.py | dead or unreachable code detection |"
           } >> "$GITHUB_STEP_SUMMARY"
       - run: |
           results=(
