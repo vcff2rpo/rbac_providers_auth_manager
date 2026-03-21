@@ -139,6 +139,48 @@ CONTRACTS: Final[tuple[TestContract, ...]] = (
         capability_tags=("runtime_smoke",),
     ),
     TestContract(
+        "tests/ci/test_runtime_backends.py",
+        "unit",
+        "quality",
+        capability_tags=(
+            "auth_state_backends",
+            "rate_limit_backends",
+            "session_flow_state",
+        ),
+    ),
+    TestContract(
+        "tests/ci/test_redirect_and_session_services.py",
+        "unit",
+        "quality",
+        capability_tags=(
+            "redirect_sanitization",
+            "session_cookie_management",
+            "runtime_context",
+        ),
+    ),
+    TestContract(
+        "tests/ci/test_audit_and_governance_reports.py",
+        "unit",
+        "quality",
+        capability_tags=(
+            "audit_service",
+            "version_policy",
+            "compatibility_governance",
+        ),
+    ),
+    TestContract(
+        "tests/ci/test_ui_status_components.py",
+        "unit",
+        "quality",
+        capability_tags=("ui_status_components",),
+    ),
+    TestContract(
+        "tests/ci/test_core_helpers.py",
+        "unit",
+        "quality",
+        capability_tags=("core_helpers", "session_guards"),
+    ),
+    TestContract(
         "tests/ci/test_airflow_smoke.py",
         "airflow_runtime",
         "airflow_integration",
@@ -176,49 +218,58 @@ CONTRACTS: Final[tuple[TestContract, ...]] = (
 )
 
 DEEP_VALIDATION_GROUPS: Final[dict[str, tuple[str, ...]]] = {
-    "config-runtime": (
+    "config-runtime-security-governance": (
         "tests/ci/test_config_matrix.py",
         "tests/ci/test_config_runtime.py",
+        "tests/ci/test_permissions_ini_scenarios.py",
+        "tests/ci/test_runtime_security_and_logging.py",
+        "tests/ci/test_runtime_smoke.py",
+        "tests/ci/test_audit_and_governance_reports.py",
+        "tests/ci/test_core_helpers.py",
+    ),
+    "authorization-rbac-compatibility": (
+        "tests/ci/test_authorization_policy.py",
         "tests/ci/test_fab_role_static_mirror.py",
         "tests/ci/test_identity_mapping_matrix.py",
         "tests/ci/test_role_vocabulary_drift_guard.py",
-        "tests/ci/test_permissions_ini_scenarios.py",
-        "tests/ci/test_runtime_negative_paths.py",
-        "tests/ci/test_runtime_security_and_logging.py",
-        "tests/ci/test_runtime_smoke.py",
     ),
-    "authorization-routes": (
-        "tests/ci/test_authorization_policy.py",
+    "api-ui-browser-session": (
         "tests/ci/test_api_surface_contracts.py",
         "tests/ci/test_browser_token_flow_matrix.py",
-        "tests/ci/test_import_smoke.py",
+        "tests/ci/test_runtime_negative_paths.py",
+        "tests/ci/test_redirect_and_session_services.py",
+        "tests/ci/test_ui_status_components.py",
     ),
-    "provider-simulations": (
+    "identity-provider-runtime-backends": (
         "tests/ci/test_ldap_backend_simulation.py",
         "tests/ci/test_entra_backend_simulation.py",
         "tests/ci/test_entra_browser_flow_integration.py",
+        "tests/ci/test_runtime_backends.py",
     ),
 }
 
 COVERAGE_FAMILIES: Final[dict[str, CoverageFamily]] = {
-    "config-runtime": {
+    "config-runtime-security-governance": {
         "threshold": 45,
         "files": (
             "tests/ci/test_config_matrix.py",
             "tests/ci/test_config_runtime.py",
             "tests/ci/test_permissions_ini_scenarios.py",
-            "tests/ci/test_runtime_negative_paths.py",
             "tests/ci/test_runtime_security_and_logging.py",
             "tests/ci/test_runtime_smoke.py",
+            "tests/ci/test_audit_and_governance_reports.py",
+            "tests/ci/test_core_helpers.py",
         ),
         "cov_targets": (
             "rbac_providers_auth_manager.config",
             "rbac_providers_auth_manager.config_runtime",
             "rbac_providers_auth_manager.runtime",
             "rbac_providers_auth_manager.core",
+            "rbac_providers_auth_manager.services.audit_schema",
+            "rbac_providers_auth_manager.services.audit_service",
         ),
     },
-    "rbac-mirror": {
+    "authorization-rbac-compatibility": {
         "threshold": 35,
         "files": (
             "tests/ci/test_authorization_policy.py",
@@ -228,15 +279,18 @@ COVERAGE_FAMILIES: Final[dict[str, CoverageFamily]] = {
         ),
         "cov_targets": (
             "rbac_providers_auth_manager.authorization",
+            "rbac_providers_auth_manager.compatibility",
             "rbac_providers_auth_manager.identity",
         ),
     },
-    "browser-flows": {
-        "threshold": 30,
+    "api-ui-browser-session": {
+        "threshold": 35,
         "files": (
             "tests/ci/test_api_surface_contracts.py",
             "tests/ci/test_browser_token_flow_matrix.py",
-            "tests/ci/test_entra_browser_flow_integration.py",
+            "tests/ci/test_runtime_negative_paths.py",
+            "tests/ci/test_redirect_and_session_services.py",
+            "tests/ci/test_ui_status_components.py",
         ),
         "cov_targets": (
             "rbac_providers_auth_manager.api.models",
@@ -245,25 +299,32 @@ COVERAGE_FAMILIES: Final[dict[str, CoverageFamily]] = {
             "rbac_providers_auth_manager.entrypoints.auth_manager",
             "rbac_providers_auth_manager.services.entrypoint_app_service",
             "rbac_providers_auth_manager.services.flow_payloads",
-            "rbac_providers_auth_manager.services.ldap_browser_flow_service",
-            "rbac_providers_auth_manager.services.oauth_browser_flow_service",
+            "rbac_providers_auth_manager.services.redirect_service",
+            "rbac_providers_auth_manager.services.runtime_context_service",
+            "rbac_providers_auth_manager.services.session_service",
             "rbac_providers_auth_manager.services.token_flow_service",
+            "rbac_providers_auth_manager.services.user_session_service",
             "rbac_providers_auth_manager.ui.renderer",
             "rbac_providers_auth_manager.ui.status_panel_renderer",
             "rbac_providers_auth_manager.ui.status_presenter",
             "rbac_providers_auth_manager.ui.status_query_service",
         ),
     },
-    "provider-simulations": {
+    "identity-provider-runtime-backends": {
         "threshold": 35,
         "files": (
             "tests/ci/test_ldap_backend_simulation.py",
             "tests/ci/test_entra_backend_simulation.py",
+            "tests/ci/test_entra_browser_flow_integration.py",
+            "tests/ci/test_runtime_backends.py",
         ),
         "cov_targets": (
             "rbac_providers_auth_manager.providers",
             "rbac_providers_auth_manager.identity",
-            "rbac_providers_auth_manager.services",
+            "rbac_providers_auth_manager.services.provider_runtime_service",
+            "rbac_providers_auth_manager.runtime.auth_state_backends",
+            "rbac_providers_auth_manager.runtime.rate_limit_backends",
+            "rbac_providers_auth_manager.runtime.rate_limiter",
         ),
     },
     "bootstrap-imports": {
@@ -336,6 +397,66 @@ CAPABILITY_CATALOG: Final[tuple[dict[str, object], ...]] = (
     {
         "name": "Negative-path runtime behavior",
         "tag": "negative_runtime",
+        "status": "covered",
+    },
+    {
+        "name": "Auth-state backend selection and persistence",
+        "tag": "auth_state_backends",
+        "status": "covered",
+    },
+    {
+        "name": "Rate-limit backend behavior",
+        "tag": "rate_limit_backends",
+        "status": "covered",
+    },
+    {
+        "name": "Session flow-state persistence",
+        "tag": "session_flow_state",
+        "status": "covered",
+    },
+    {
+        "name": "Redirect sanitization and external-base resolution",
+        "tag": "redirect_sanitization",
+        "status": "covered",
+    },
+    {
+        "name": "Session cookie and logout state management",
+        "tag": "session_cookie_management",
+        "status": "covered",
+    },
+    {
+        "name": "Runtime context helper behavior",
+        "tag": "runtime_context",
+        "status": "covered",
+    },
+    {
+        "name": "Structured audit payload and event emission",
+        "tag": "audit_service",
+        "status": "covered",
+    },
+    {
+        "name": "Runtime version policy reporting",
+        "tag": "version_policy",
+        "status": "covered",
+    },
+    {
+        "name": "Compatibility governance doctor report",
+        "tag": "compatibility_governance",
+        "status": "covered",
+    },
+    {
+        "name": "UI status query, presenter, and panel rendering",
+        "tag": "ui_status_components",
+        "status": "covered",
+    },
+    {
+        "name": "Core parsing and proxy helpers",
+        "tag": "core_helpers",
+        "status": "covered",
+    },
+    {
+        "name": "DB session rollback guards",
+        "tag": "session_guards",
         "status": "covered",
     },
     {

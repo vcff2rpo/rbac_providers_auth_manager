@@ -22,7 +22,12 @@ SUITES = [
     "fab_provider_validation",
     "external_real_validation",
 ]
-GROUPS = ["config-runtime", "authorization-routes", "provider-simulations"]
+GROUPS = [
+    "config-runtime-security-governance",
+    "authorization-rbac-compatibility",
+    "api-ui-browser-session",
+    "identity-provider-runtime-backends",
+]
 
 
 def main() -> None:

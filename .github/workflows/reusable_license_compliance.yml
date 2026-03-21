@@ -19,8 +19,6 @@ permissions:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-
-env:
   LICENSE_ARTIFACT_DIR: .ci-artifacts/license
 
 jobs:

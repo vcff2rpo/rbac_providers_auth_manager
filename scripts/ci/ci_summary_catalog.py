@@ -12,10 +12,8 @@ class LaneTask:
 
 
 PHASES: tuple[tuple[str, tuple[str, ...]], ...] = (
-    (
-        "Static analysis, typing, and contract catalog",
-        ("quality", "deep_validation"),
-    ),
+    ("Fast static analysis and contract inventory", ("quality",)),
+    ("Deep functional validation and coverage", ("deep_validation",)),
     (
         "Runtime and identity integration",
         ("airflow_integration", "identity_provider_integration"),
@@ -28,10 +26,7 @@ PHASES: tuple[tuple[str, tuple[str, ...]], ...] = (
             "external_real_validation",
         ),
     ),
-    (
-        "Compliance, security, and release readiness",
-        ("license_compliance",),
-    ),
+    ("Compliance, security, and release readiness", ("license_compliance",)),
 )
 
 LANE_DISPLAY_NAMES: dict[str, str] = {
@@ -46,9 +41,9 @@ LANE_DISPLAY_NAMES: dict[str, str] = {
 }
 
 LANE_PURPOSE: dict[str, str] = {
-    "quality": "Fast repository-wide static and contract checks that should fail early when code or CI helpers regress.",
-    "deep_validation": "Broader unit and mock validation with coverage and dead-code scanning across multiple Python versions.",
-    "airflow_integration": "Bootstraps Airflow with the plugin and validates runtime import, database, DAG, auth-surface, and API behavior.",
+    "quality": "Fast repository-wide static checks plus area-grouped pytest coverage families to catch regressions early.",
+    "deep_validation": "Broader area-grouped unit and mock validation across multiple Python versions with coverage and dead-code scanning.",
+    "airflow_integration": "Bootstraps Airflow with the plugin and validates runtime import, database, DAG, UI, and API behavior.",
     "identity_provider_integration": "Exercises live LDAP-container behavior and Entra callback/browser-flow integration paths.",
     "fab_provider_validation": "Validates the plugin RBAC mirror against the installed official FAB provider release.",
     "nightly_compatibility": "Scheduled compatibility sweep across the declared Airflow, FAB provider, and Python version matrix.",
@@ -59,9 +54,11 @@ LANE_PURPOSE: dict[str, str] = {
 SUITE_SOURCE_AREAS: dict[str, tuple[str, ...]] = {
     "quality": (
         "rbac_providers_auth_manager.authorization",
-        "rbac_providers_auth_manager.identity",
+        "rbac_providers_auth_manager.compatibility",
         "rbac_providers_auth_manager.config",
         "rbac_providers_auth_manager.config_runtime",
+        "rbac_providers_auth_manager.core",
+        "rbac_providers_auth_manager.identity",
         "rbac_providers_auth_manager.runtime",
         "rbac_providers_auth_manager.api",
         "rbac_providers_auth_manager.entrypoints",
@@ -131,7 +128,6 @@ SUITE_SOURCE_AREAS: dict[str, tuple[str, ...]] = {
     ),
 }
 
-
 LANE_TASKS: dict[str, tuple[LaneTask, ...]] = {
     "quality": (
         LaneTask(
@@ -142,7 +138,7 @@ LANE_TASKS: dict[str, tuple[LaneTask, ...]] = {
         ),
         LaneTask(
             lane="quality",
-            task="pytest collect (Python 3.13)",
+            task="pytest collect and coverage catalog",
             files=(
                 "tests/ci/* selected by suite quality",
                 "scripts/ci/report_solution_coverage.py",
@@ -171,27 +167,31 @@ LANE_TASKS: dict[str, tuple[LaneTask, ...]] = {
             lane="quality",
             task="mypy tests and CI helpers",
             files=("tests/ci/**/*.py", "scripts/ci/**/*.py"),
-            description="Type-checks the full CI-facing test and helper surface, not just the quality-suite subset.",
+            description="Type-checks the full CI-facing test and helper surface.",
         ),
         LaneTask(
             lane="quality",
-            task="pytest family coverage",
+            task="pytest area coverage families",
             files=(
                 "tests/ci/test_config_*.py",
                 "tests/ci/test_permissions_ini_scenarios.py",
                 "tests/ci/test_runtime_*.py",
+                "tests/ci/test_audit_and_governance_reports.py",
+                "tests/ci/test_core_helpers.py",
                 "tests/ci/test_authorization_policy.py",
                 "tests/ci/test_fab_role_static_mirror.py",
                 "tests/ci/test_identity_mapping_matrix.py",
                 "tests/ci/test_role_vocabulary_drift_guard.py",
                 "tests/ci/test_api_surface_contracts.py",
                 "tests/ci/test_browser_token_flow_matrix.py",
-                "tests/ci/test_entra_browser_flow_integration.py",
+                "tests/ci/test_redirect_and_session_services.py",
+                "tests/ci/test_ui_status_components.py",
                 "tests/ci/test_ldap_backend_simulation.py",
                 "tests/ci/test_entra_backend_simulation.py",
+                "tests/ci/test_entra_browser_flow_integration.py",
                 "tests/ci/test_import_smoke.py",
             ),
-            description="Runs the quality-lane pytest families with per-family coverage thresholds and selector summaries.",
+            description="Runs the quality-lane pytest families grouped by plugin functionality area with per-family coverage thresholds.",
         ),
         LaneTask(
             lane="quality",
@@ -209,7 +209,7 @@ LANE_TASKS: dict[str, tuple[LaneTask, ...]] = {
             lane="deep_validation",
             task="test catalog coverage",
             files=("tests/ci/test_*.py", "tests/ci/contract_manifest.py"),
-            description="Checks that every CI test file is assigned to a workflow suite.",
+            description="Checks that every CI test file is assigned to a workflow suite exactly once.",
         ),
         LaneTask(
             lane="deep_validation",
@@ -219,19 +219,51 @@ LANE_TASKS: dict[str, tuple[LaneTask, ...]] = {
         ),
         LaneTask(
             lane="deep_validation",
-            task="unit + mock tests",
+            task="area shard: config-runtime-security-governance",
             files=(
-                "tests/ci/test_config_*.py",
+                "tests/ci/test_config_matrix.py",
+                "tests/ci/test_config_runtime.py",
                 "tests/ci/test_permissions_ini_scenarios.py",
-                "tests/ci/test_runtime_*.py",
+                "tests/ci/test_runtime_security_and_logging.py",
+                "tests/ci/test_runtime_smoke.py",
+                "tests/ci/test_audit_and_governance_reports.py",
+                "tests/ci/test_core_helpers.py",
+            ),
+            description="Validates configuration parsing, advisories, runtime security, governance reporting, and low-level helper behavior.",
+        ),
+        LaneTask(
+            lane="deep_validation",
+            task="area shard: authorization-rbac-compatibility",
+            files=(
                 "tests/ci/test_authorization_policy.py",
+                "tests/ci/test_fab_role_static_mirror.py",
+                "tests/ci/test_identity_mapping_matrix.py",
+                "tests/ci/test_role_vocabulary_drift_guard.py",
+            ),
+            description="Validates RBAC policy behavior, vocabulary drift protection, and static mirror contracts.",
+        ),
+        LaneTask(
+            lane="deep_validation",
+            task="area shard: api-ui-browser-session",
+            files=(
                 "tests/ci/test_api_surface_contracts.py",
                 "tests/ci/test_browser_token_flow_matrix.py",
+                "tests/ci/test_runtime_negative_paths.py",
+                "tests/ci/test_redirect_and_session_services.py",
+                "tests/ci/test_ui_status_components.py",
+            ),
+            description="Validates API routes, browser flows, UI status rendering, redirect safety, session helpers, and negative-path behavior.",
+        ),
+        LaneTask(
+            lane="deep_validation",
+            task="area shard: identity-provider-runtime-backends",
+            files=(
                 "tests/ci/test_ldap_backend_simulation.py",
                 "tests/ci/test_entra_backend_simulation.py",
                 "tests/ci/test_entra_browser_flow_integration.py",
+                "tests/ci/test_runtime_backends.py",
             ),
-            description="Executes the deep-validation shards across the configured Python matrix with coverage.",
+            description="Validates LDAP and Entra simulations together with runtime auth-state and rate-limit backend behavior.",
         ),
         LaneTask(
             lane="deep_validation",
@@ -377,7 +409,6 @@ LANE_TASKS: dict[str, tuple[LaneTask, ...]] = {
         ),
     ),
 }
-
 
 SUPPLEMENTAL_AREAS: tuple[dict[str, object], ...] = (
     {

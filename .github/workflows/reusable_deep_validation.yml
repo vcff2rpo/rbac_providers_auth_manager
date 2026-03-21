@@ -24,8 +24,6 @@ permissions:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-
-env:
   DEEP_ARTIFACT_DIR: .ci-artifacts/deep-validation
   PYTEST_VERBOSE_ARGS: >-
     -vv -rA -s --showlocals --durations=20 --log-cli-level=INFO
@@ -116,9 +114,10 @@ jobs:
       matrix:
         python-version: ${{ fromJson(inputs['python-versions']) }}
         group-name:
-          - config-runtime
-          - authorization-routes
-          - provider-simulations
+          - config-runtime-security-governance
+          - authorization-rbac-compatibility
+          - api-ui-browser-session
+          - identity-provider-runtime-backends
     env:
       PACKAGE_NAME: ${{ inputs['package-name'] }}
       PYTHONPATH: ${{ github.workspace }}/..
@@ -210,7 +209,7 @@ jobs:
             echo "|---|---|---|---|---|"
             echo "| test-catalog | [x] yes | ${{ needs.test-catalog.result }} | tests/ci/test_*.py, tests/ci/contract_manifest.py | every CI test file is assigned to exactly one lane |"
             echo "| compile-and-import-smoke | [x] yes | ${{ needs.compile-and-import-smoke.result }} | repository Python sources, tests/ci/test_import_smoke.py | compilation plus import smoke gate |"
-            echo "| unit-and-mock-tests | [x] yes | ${{ needs.unit-and-mock-tests.result }} | config-runtime, authorization-routes, provider-simulations shards across Python matrix | deeper functional contracts with coverage |"
+            echo "| unit-and-mock-tests | [x] yes | ${{ needs.unit-and-mock-tests.result }} | config-runtime-security-governance, authorization-rbac-compatibility, api-ui-browser-session, identity-provider-runtime-backends shards across Python matrix | deeper functional contracts with coverage |"
             echo "| dead-code | [x] yes | ${{ needs.dead-code.result }} | rbac_providers_auth_manager/**, tests/ci/**/*.py, scripts/ci/**/*.py | dead or unreachable code detection |"
           } >> "$GITHUB_STEP_SUMMARY"
       - run: |
