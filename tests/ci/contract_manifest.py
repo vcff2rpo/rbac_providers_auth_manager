@@ -94,6 +94,12 @@ CONTRACTS: Final[tuple[TestContract, ...]] = (
         capability_tags=("fab_static_mirror",),
     ),
     TestContract(
+        "tests/ci/test_fab_support_summary_render.py",
+        "provider_mirror",
+        "quality",
+        capability_tags=("fab_support_summary_render",),
+    ),
+    TestContract(
         "tests/ci/test_identity_mapping_matrix.py",
         "provider_mirror",
         "quality",
@@ -274,6 +280,7 @@ DEEP_VALIDATION_GROUPS: Final[dict[str, tuple[str, ...]]] = {
     "role-mapping-rbac-compatibility": (
         "tests/ci/test_authorization_policy.py",
         "tests/ci/test_fab_role_static_mirror.py",
+        "tests/ci/test_fab_support_summary_render.py",
         "tests/ci/test_identity_mapping_matrix.py",
         "tests/ci/test_role_vocabulary_drift_guard.py",
     ),
@@ -321,6 +328,7 @@ COVERAGE_FAMILIES: Final[dict[str, CoverageFamily]] = {
         "files": (
             "tests/ci/test_authorization_policy.py",
             "tests/ci/test_fab_role_static_mirror.py",
+            "tests/ci/test_fab_support_summary_render.py",
             "tests/ci/test_identity_mapping_matrix.py",
             "tests/ci/test_role_vocabulary_drift_guard.py",
         ),
@@ -467,6 +475,11 @@ CAPABILITY_CATALOG: Final[tuple[dict[str, object], ...]] = (
     },
     {"name": "Identity mapping matrix", "tag": "identity_mapping", "status": "covered"},
     {"name": "FAB static mirror", "tag": "fab_static_mirror", "status": "covered"},
+    {
+        "name": "FAB support summary rendering",
+        "tag": "fab_support_summary_render",
+        "status": "covered",
+    },
     {
         "name": "FAB official provider mirror",
         "tag": "fab_provider_official_mirror",

@@ -181,6 +181,7 @@ LANE_TASKS: dict[str, tuple[LaneTask, ...]] = {
                 "tests/ci/test_core_helpers.py",
                 "tests/ci/test_authorization_policy.py",
                 "tests/ci/test_fab_role_static_mirror.py",
+                "tests/ci/test_fab_support_summary_render.py",
                 "tests/ci/test_identity_mapping_matrix.py",
                 "tests/ci/test_role_vocabulary_drift_guard.py",
                 "tests/ci/test_api_surface_contracts.py",
@@ -243,6 +244,7 @@ LANE_TASKS: dict[str, tuple[LaneTask, ...]] = {
             files=(
                 "tests/ci/test_authorization_policy.py",
                 "tests/ci/test_fab_role_static_mirror.py",
+                "tests/ci/test_fab_support_summary_render.py",
                 "tests/ci/test_identity_mapping_matrix.py",
                 "tests/ci/test_role_vocabulary_drift_guard.py",
             ),
