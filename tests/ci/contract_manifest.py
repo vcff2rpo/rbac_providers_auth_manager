@@ -106,6 +106,24 @@ CONTRACTS: Final[tuple[TestContract, ...]] = (
         capability_tags=("identity_mapping",),
     ),
     TestContract(
+        "tests/ci/test_ldap_mapping_edge_matrix.py",
+        "provider_mirror",
+        "quality",
+        capability_tags=("ldap_mapping_edges",),
+    ),
+    TestContract(
+        "tests/ci/test_entra_mapping_edge_matrix.py",
+        "provider_mirror",
+        "quality",
+        capability_tags=("entra_mapping_edges",),
+    ),
+    TestContract(
+        "tests/ci/test_cross_provider_mapping_isolation.py",
+        "provider_mirror",
+        "quality",
+        capability_tags=("cross_provider_mapping_isolation",),
+    ),
+    TestContract(
         "tests/ci/test_role_vocabulary_drift_guard.py",
         "provider_mirror",
         "quality",
@@ -190,6 +208,12 @@ CONTRACTS: Final[tuple[TestContract, ...]] = (
         ),
     ),
     TestContract(
+        "tests/ci/test_rate_limit_boundary_matrix.py",
+        "unit",
+        "quality",
+        capability_tags=("rate_limit_boundaries",),
+    ),
+    TestContract(
         "tests/ci/test_redirect_and_session_services.py",
         "unit",
         "quality",
@@ -233,6 +257,16 @@ CONTRACTS: Final[tuple[TestContract, ...]] = (
             "audit_service",
             "api_observability_logging",
             "browser_failure_audit",
+        ),
+    ),
+    TestContract(
+        "tests/ci/test_audit_success_matrix.py",
+        "unit",
+        "quality",
+        capability_tags=(
+            "audit_success_matrix",
+            "oauth_callback_audit",
+            "provider_disabled_logging",
         ),
     ),
     TestContract(
@@ -302,6 +336,9 @@ DEEP_VALIDATION_GROUPS: Final[dict[str, tuple[str, ...]]] = {
         "tests/ci/test_fab_role_static_mirror.py",
         "tests/ci/test_fab_support_summary_render.py",
         "tests/ci/test_identity_mapping_matrix.py",
+        "tests/ci/test_ldap_mapping_edge_matrix.py",
+        "tests/ci/test_entra_mapping_edge_matrix.py",
+        "tests/ci/test_cross_provider_mapping_isolation.py",
         "tests/ci/test_role_vocabulary_drift_guard.py",
     ),
     "api-ui-browser-session-observability": (
@@ -318,6 +355,7 @@ DEEP_VALIDATION_GROUPS: Final[dict[str, tuple[str, ...]]] = {
         "tests/ci/test_entra_backend_simulation.py",
         "tests/ci/test_entra_browser_flow_integration.py",
         "tests/ci/test_runtime_backends.py",
+        "tests/ci/test_rate_limit_boundary_matrix.py",
     ),
     "audit-logging-governance": (
         "tests/ci/test_runtime_security_and_logging.py",
@@ -354,6 +392,9 @@ COVERAGE_FAMILIES: Final[dict[str, CoverageFamily]] = {
             "tests/ci/test_fab_role_static_mirror.py",
             "tests/ci/test_fab_support_summary_render.py",
             "tests/ci/test_identity_mapping_matrix.py",
+            "tests/ci/test_ldap_mapping_edge_matrix.py",
+            "tests/ci/test_entra_mapping_edge_matrix.py",
+            "tests/ci/test_cross_provider_mapping_isolation.py",
             "tests/ci/test_role_vocabulary_drift_guard.py",
         ),
         "cov_targets": (
@@ -402,6 +443,7 @@ COVERAGE_FAMILIES: Final[dict[str, CoverageFamily]] = {
             "tests/ci/test_entra_backend_simulation.py",
             "tests/ci/test_entra_browser_flow_integration.py",
             "tests/ci/test_runtime_backends.py",
+            "tests/ci/test_rate_limit_boundary_matrix.py",
         ),
         "cov_targets": (
             "rbac_providers_auth_manager.providers",
@@ -500,6 +542,21 @@ CAPABILITY_CATALOG: Final[tuple[dict[str, object], ...]] = (
         "status": "covered",
     },
     {"name": "Identity mapping matrix", "tag": "identity_mapping", "status": "covered"},
+    {
+        "name": "LDAP mapping edge matrix",
+        "tag": "ldap_mapping_edges",
+        "status": "covered",
+    },
+    {
+        "name": "Entra mapping edge matrix",
+        "tag": "entra_mapping_edges",
+        "status": "covered",
+    },
+    {
+        "name": "Cross-provider mapping isolation",
+        "tag": "cross_provider_mapping_isolation",
+        "status": "covered",
+    },
     {"name": "FAB static mirror", "tag": "fab_static_mirror", "status": "covered"},
     {
         "name": "FAB support summary rendering",
@@ -532,6 +589,11 @@ CAPABILITY_CATALOG: Final[tuple[dict[str, object], ...]] = (
         "status": "covered",
     },
     {
+        "name": "Rate-limit boundary and reset behavior",
+        "tag": "rate_limit_boundaries",
+        "status": "covered",
+    },
+    {
         "name": "OAuth/browser rate-limit flow handling",
         "tag": "oauth_rate_limit_flow",
         "status": "covered",
@@ -559,6 +621,16 @@ CAPABILITY_CATALOG: Final[tuple[dict[str, object], ...]] = (
     {
         "name": "Structured audit payload and event emission",
         "tag": "audit_service",
+        "status": "covered",
+    },
+    {
+        "name": "Audit success and callback event matrix",
+        "tag": "audit_success_matrix",
+        "status": "covered",
+    },
+    {
+        "name": "OAuth callback rejection/failure audit coverage",
+        "tag": "oauth_callback_audit",
         "status": "covered",
     },
     {
