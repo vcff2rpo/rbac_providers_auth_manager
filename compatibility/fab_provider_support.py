@@ -14,8 +14,7 @@ from rbac_providers_auth_manager.authorization.compat_matrix import (
 )
 from rbac_providers_auth_manager.authorization.rbac import RbacPolicy
 from rbac_providers_auth_manager.authorization.resource_contracts import (
-    NON_ADMIN_RESOURCE_CONTRACTS,
-    role_meets_minimum,
+    contract_permissions_by_role,
 )
 from rbac_providers_auth_manager.config_runtime.models import (
     AuthConfig,
@@ -220,27 +219,16 @@ def _filtered_official_permissions(
 
 
 def _plugin_contract_permissions() -> dict[str, frozenset[tuple[str, str]]]:
-    contract_permissions: dict[str, set[tuple[str, str]]] = {
-        role: set() for role in ROLE_ORDER
-    }
-    for contract in NON_ADMIN_RESOURCE_CONTRACTS:
-        menu_pair = (
-            vocab.normalize_action(contract.menu_action),
-            vocab.normalize_resource(contract.menu_resource),
-        )
-        functional_pairs = {
+    contract_permissions = contract_permissions_by_role()
+    return {
+        role_name: frozenset(
             (
                 vocab.normalize_action(action),
-                vocab.normalize_resource(contract.resource),
+                vocab.normalize_resource(resource),
             )
-            for action in contract.functional_actions
-        }
-        for role_name in ROLE_ORDER:
-            if role_meets_minimum(role_name, contract.minimum_role):
-                contract_permissions[role_name].add(menu_pair)
-                contract_permissions[role_name].update(functional_pairs)
-    return {
-        role: frozenset(sorted(perms)) for role, perms in contract_permissions.items()
+            for action, resource in permissions
+        )
+        for role_name, permissions in contract_permissions.items()
     }
 
 
