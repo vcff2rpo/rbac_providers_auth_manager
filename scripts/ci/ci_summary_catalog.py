@@ -83,6 +83,7 @@ SUITE_SOURCE_AREAS: dict[str, tuple[str, ...]] = {
         "scripts/ci/check_airflow_auth_surface.sh",
         "scripts/ci/check_airflow_discovery.sh",
         "tests/ci/test_airflow_smoke.py",
+        "tests/ci/test_airflow_packaged_provider_runtime.py",
     ),
     "identity_provider_integration": (
         "rbac_providers_auth_manager.providers.ldap_*",
@@ -188,12 +189,14 @@ LANE_TASKS: dict[str, tuple[LaneTask, ...]] = {
                 "tests/ci/test_runtime_negative_paths.py",
                 "tests/ci/test_redirect_and_session_services.py",
                 "tests/ci/test_ui_status_components.py",
+                "tests/ci/test_permissions_api_payload_matrix.py",
                 "tests/ci/test_ldap_backend_simulation.py",
                 "tests/ci/test_entra_backend_simulation.py",
                 "tests/ci/test_entra_browser_flow_integration.py",
                 "tests/ci/test_runtime_backends.py",
                 "tests/ci/test_runtime_security_and_logging.py",
                 "tests/ci/test_audit_and_governance_reports.py",
+                "tests/ci/test_audit_service_logging_matrix.py",
                 "tests/ci/test_import_smoke.py",
             ),
             description="Runs the quality-lane pytest families grouped by plugin functionality area with per-family coverage thresholds and scenario-rich API/audit checks.",
@@ -255,6 +258,7 @@ LANE_TASKS: dict[str, tuple[LaneTask, ...]] = {
                 "tests/ci/test_runtime_negative_paths.py",
                 "tests/ci/test_redirect_and_session_services.py",
                 "tests/ci/test_ui_status_components.py",
+                "tests/ci/test_permissions_api_payload_matrix.py",
             ),
             description="Validates API routes, browser flows, UI status rendering, rate-limit responses, redirect safety, session helpers, and negative-path observability.",
         ),
@@ -275,6 +279,7 @@ LANE_TASKS: dict[str, tuple[LaneTask, ...]] = {
             files=(
                 "tests/ci/test_runtime_security_and_logging.py",
                 "tests/ci/test_audit_and_governance_reports.py",
+                "tests/ci/test_audit_service_logging_matrix.py",
             ),
             description="Validates audit payloads, API/browser event logging, runtime security messages, and governance/version reporting.",
         ),
@@ -302,13 +307,24 @@ LANE_TASKS: dict[str, tuple[LaneTask, ...]] = {
         ),
         LaneTask(
             lane="airflow_integration",
+            task="installed package metadata and provider facade smoke",
+            files=(
+                "pyproject.toml",
+                "setup.py",
+                "tests/ci/test_airflow_packaged_provider_runtime.py",
+            ),
+            description="Validates that the built package metadata is visible inside the Airflow runtime and that the root auth-manager facade resolves to the runtime entrypoint.",
+        ),
+        LaneTask(
+            lane="airflow_integration",
             task="Airflow DB, DAG, UI, and API smoke",
             files=(
                 "scripts/ci/check_airflow_discovery.sh",
                 "scripts/ci/check_airflow_auth_surface.sh",
                 "tests/ci/test_airflow_smoke.py",
+                "tests/ci/test_airflow_packaged_provider_runtime.py",
             ),
-            description="Validates DB migration, DAG discovery, API health, login surface, and a hello-world DAG run.",
+            description="Validates DB migration, DAG discovery, API health, login surface, packaged-provider runtime behavior, and a hello-world DAG run.",
         ),
     ),
     "identity_provider_integration": (
@@ -416,6 +432,12 @@ LANE_TASKS: dict[str, tuple[LaneTask, ...]] = {
         ),
         LaneTask(
             lane="license_compliance",
+            task="built distribution install smoke",
+            files=("dist/*.whl", "isolated virtual environment"),
+            description="Installs the freshly built wheel in a clean virtual environment and verifies package metadata import.",
+        ),
+        LaneTask(
+            lane="license_compliance",
             task="SBOM",
             files=("installed environment",),
             description="Generates CycloneDX JSON/XML SBOM output and a compact markdown summary.",
@@ -465,6 +487,14 @@ SUPPLEMENTAL_AREAS: tuple[dict[str, object], ...] = (
         "tag": "airflow_runtime_smoke",
         "status": "covered",
         "lanes": ("airflow_integration",),
+        "reason": "Executed by the Airflow integration suite against the declared Airflow version.",
+    },
+    {
+        "name": "Packaged provider install inside Airflow runtime",
+        "tag": "airflow_packaged_provider_install",
+        "status": "covered",
+        "lanes": ("airflow_integration",),
+        "reason": "The Airflow integration lane installs the local distribution and validates the packaged runtime facade.",
     },
     {
         "name": "Official FAB provider compatibility snapshot",
@@ -513,24 +543,28 @@ SUPPLEMENTAL_AREAS: tuple[dict[str, object], ...] = (
         "tag": "visual_regression",
         "status": "gap",
         "lanes": (),
+        "reason": "No browser screenshot-diff harness is wired into the current CI matrix yet.",
     },
     {
         "name": "Built wheel or sdist installation smoke",
         "tag": "built_distribution_install",
-        "status": "gap",
-        "lanes": (),
+        "status": "covered",
+        "lanes": ("license_compliance",),
+        "reason": "The license-compliance lane now installs the freshly built wheel in an isolated virtual environment.",
     },
     {
         "name": "Multi-node shared-state failover simulation",
         "tag": "ha_failover",
         "status": "gap",
         "lanes": (),
+        "reason": "The current CI topology runs on single-host ephemeral workers and does not provision clustered shared-session infrastructure.",
     },
     {
         "name": "Airflow 3.2+ provider CLI surface validation",
         "tag": "provider_cli_surface",
         "status": "gap",
         "lanes": (),
+        "reason": "The declared compatibility matrix in this repository is still centered on Airflow 3.1.8 and FAB provider 3.5.0.",
     },
 )
 

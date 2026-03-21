@@ -191,6 +191,26 @@ CONTRACTS: Final[tuple[TestContract, ...]] = (
         capability_tags=("ui_status_components",),
     ),
     TestContract(
+        "tests/ci/test_permissions_api_payload_matrix.py",
+        "unit",
+        "quality",
+        capability_tags=(
+            "permissions_api_payloads",
+            "api_surface_contracts",
+            "ui_status_customization_config",
+        ),
+    ),
+    TestContract(
+        "tests/ci/test_audit_service_logging_matrix.py",
+        "unit",
+        "quality",
+        capability_tags=(
+            "audit_service",
+            "api_observability_logging",
+            "browser_failure_audit",
+        ),
+    ),
+    TestContract(
         "tests/ci/test_core_helpers.py",
         "unit",
         "quality",
@@ -208,6 +228,16 @@ CONTRACTS: Final[tuple[TestContract, ...]] = (
             "airflow_protected_endpoint_auth",
             "hello_world_dag_discovery",
             "hello_world_dag_execution",
+        ),
+    ),
+    TestContract(
+        "tests/ci/test_airflow_packaged_provider_runtime.py",
+        "airflow_runtime",
+        "airflow_integration",
+        ("slow",),
+        (
+            "airflow_auth_manager_import",
+            "airflow_packaged_provider_runtime",
         ),
     ),
     TestContract(
@@ -254,6 +284,7 @@ DEEP_VALIDATION_GROUPS: Final[dict[str, tuple[str, ...]]] = {
         "tests/ci/test_runtime_negative_paths.py",
         "tests/ci/test_redirect_and_session_services.py",
         "tests/ci/test_ui_status_components.py",
+        "tests/ci/test_permissions_api_payload_matrix.py",
     ),
     "provider-backends-and-rate-limits": (
         "tests/ci/test_ldap_backend_simulation.py",
@@ -264,6 +295,7 @@ DEEP_VALIDATION_GROUPS: Final[dict[str, tuple[str, ...]]] = {
     "audit-logging-governance": (
         "tests/ci/test_runtime_security_and_logging.py",
         "tests/ci/test_audit_and_governance_reports.py",
+        "tests/ci/test_audit_service_logging_matrix.py",
     ),
 }
 
@@ -307,6 +339,7 @@ COVERAGE_FAMILIES: Final[dict[str, CoverageFamily]] = {
             "tests/ci/test_runtime_negative_paths.py",
             "tests/ci/test_redirect_and_session_services.py",
             "tests/ci/test_ui_status_components.py",
+            "tests/ci/test_permissions_api_payload_matrix.py",
         ),
         "cov_targets": (
             "rbac_providers_auth_manager.api.models",
@@ -352,6 +385,7 @@ COVERAGE_FAMILIES: Final[dict[str, CoverageFamily]] = {
         "files": (
             "tests/ci/test_runtime_security_and_logging.py",
             "tests/ci/test_audit_and_governance_reports.py",
+            "tests/ci/test_audit_service_logging_matrix.py",
         ),
         "cov_targets": (
             "rbac_providers_auth_manager.services.audit_schema",
@@ -509,6 +543,11 @@ CAPABILITY_CATALOG: Final[tuple[dict[str, object], ...]] = (
         "status": "covered",
     },
     {
+        "name": "permissions.ini-driven API status payloads",
+        "tag": "permissions_api_payloads",
+        "status": "covered",
+    },
+    {
         "name": "Core parsing and proxy helpers",
         "tag": "core_helpers",
         "status": "covered",
@@ -521,6 +560,11 @@ CAPABILITY_CATALOG: Final[tuple[dict[str, object], ...]] = (
     {
         "name": "Airflow auth manager import",
         "tag": "airflow_auth_manager_import",
+        "status": "covered",
+    },
+    {
+        "name": "Installed packaged provider runtime under Airflow",
+        "tag": "airflow_packaged_provider_runtime",
         "status": "covered",
     },
     {

@@ -15,7 +15,6 @@ from ci_summary_catalog import (
     PHASES,
     SUITE_SOURCE_AREAS,
     SUPPLEMENTAL_AREAS,
-    checkbox,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -49,6 +48,10 @@ SUITE_FILE_OVERRIDES = {
 }
 
 
+def checkbox(value: bool) -> str:
+    return "[x] yes" if value else "[ ] no"
+
+
 def _load_manifest() -> ModuleType:
     if str(REPO_ROOT) not in sys.path:
         sys.path.insert(0, str(REPO_ROOT))
@@ -60,7 +63,7 @@ def _parse_bool(raw: str) -> bool:
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Render top-level manual CI summary")
+    parser = argparse.ArgumentParser(description="Render final manual CI summary")
     parser.add_argument("--output-md", required=True)
     parser.add_argument("--output-json", required=True)
     parser.add_argument("--run-url", default="")
@@ -76,10 +79,9 @@ def _suite_files(manifest: ModuleType, lane: str) -> list[str]:
     if suite is None:
         return []
     if lane == "deep_validation":
-        files: set[str] = set()
+        files: set[str] = {"tests/ci/test_import_smoke.py"}
         for group in manifest.DEEP_VALIDATION_GROUPS.values():
-            files.update(group)
-        files.add("tests/ci/test_import_smoke.py")
+            files.update(str(item) for item in group)
         return sorted(files)
     if lane == "nightly_compatibility":
         return ["tests/ci/test_fab_provider_mirror_latest.py"]
@@ -88,60 +90,16 @@ def _suite_files(manifest: ModuleType, lane: str) -> list[str]:
     return sorted(files)
 
 
-def _lane_capability_names(manifest: ModuleType, lane: str) -> list[str]:
-    suite = SUITE_BY_LANE.get(lane)
-    if suite is None:
-        return []
-    files = _suite_files(manifest, lane)
-    file_set = set(files)
-    tags: set[str] = set()
-    if lane == "nightly_compatibility":
-        tags.add("nightly_matrix")
-    for contract in manifest.CONTRACTS:
-        if contract.path in file_set:
-            tags.update(str(tag) for tag in contract.capability_tags)
-    names_by_tag = {
-        str(item["tag"]): str(item["name"]) for item in manifest.CAPABILITY_CATALOG
-    }
-    return sorted(names_by_tag[tag] for tag in tags if tag in names_by_tag)
-
-
-def _all_capability_rows(
-    manifest: ModuleType, lane_status: dict[str, dict[str, object]]
-) -> list[tuple[str, bool, str]]:
-    tags_tested_in_run: set[str] = set()
-    for lane, status in lane_status.items():
-        if not bool(status["enabled"]):
-            continue
-        suite = SUITE_BY_LANE.get(lane)
-        if suite is None:
-            continue
-        lane_files = set(_suite_files(manifest, lane))
-        for contract in manifest.CONTRACTS:
-            if contract.path in lane_files:
-                tags_tested_in_run.update(str(tag) for tag in contract.capability_tags)
-        if lane == "nightly_compatibility":
-            tags_tested_in_run.add("nightly_matrix")
-
-    rows: list[tuple[str, bool, str]] = []
-    for item in manifest.CAPABILITY_CATALOG:
-        tag = str(item["tag"])
-        rows.append((str(item["name"]), tag in tags_tested_in_run, "contract manifest"))
-
-    for item in SUPPLEMENTAL_AREAS:
-        raw_lanes = cast(object, item.get("lanes", ()))
-        lanes = tuple(str(v) for v in cast(Iterable[object], raw_lanes))
-        tested = any(bool(lane_status.get(lane, {}).get("enabled")) for lane in lanes)
-        rows.append(
-            (
-                str(item["name"]),
-                tested and str(item["status"]) == "covered",
-                "supplemental CI catalog",
-            )
-        )
-
-    rows.sort(key=lambda row: (not row[1], row[0].casefold()))
-    return rows
+def _table(
+    lines: list[str], headers: Sequence[str], rows: Sequence[Sequence[str]]
+) -> None:
+    lines.append("| " + " | ".join(headers) + " |")
+    lines.append("| " + " | ".join("---" for _ in headers) + " |")
+    if rows:
+        for row in rows:
+            lines.append("| " + " | ".join(row) + " |")
+    else:
+        lines.append("| " + " | ".join("-" for _ in headers) + " |")
 
 
 def _phase_result(
@@ -160,6 +118,110 @@ def _phase_result(
     return "success"
 
 
+def _lane_capability_map(
+    manifest: ModuleType,
+    lane_status: dict[str, dict[str, object]],
+    *,
+    enabled_only: bool,
+) -> tuple[dict[str, set[str]], dict[str, str]]:
+    names_by_tag = {
+        str(item["tag"]): str(item["name"]) for item in manifest.CAPABILITY_CATALOG
+    }
+    lane_to_tags: dict[str, set[str]] = {lane: set() for lane in LANE_ORDER}
+    for lane in LANE_ORDER:
+        if enabled_only and not bool(lane_status[lane]["enabled"]):
+            continue
+        for contract in manifest.CONTRACTS:
+            if contract.path in set(_suite_files(manifest, lane)):
+                lane_to_tags[lane].update(str(tag) for tag in contract.capability_tags)
+        if lane == "nightly_compatibility":
+            lane_to_tags[lane].add("nightly_matrix")
+    return lane_to_tags, names_by_tag
+
+
+def _capability_run_rows(
+    manifest: ModuleType, lane_status: dict[str, dict[str, object]]
+) -> tuple[list[tuple[str, str, str]], list[tuple[str, str, str]]]:
+    lane_to_tags, names_by_tag = _lane_capability_map(
+        manifest, lane_status, enabled_only=True
+    )
+    all_lane_tags, _ = _lane_capability_map(manifest, lane_status, enabled_only=False)
+    tag_to_lanes: dict[str, list[str]] = {}
+    for lane, tags in lane_to_tags.items():
+        for tag in tags:
+            tag_to_lanes.setdefault(tag, []).append(lane)
+
+    tested_rows: list[tuple[str, str, str]] = []
+    missing_rows: list[tuple[str, str, str]] = []
+
+    for item in manifest.CAPABILITY_CATALOG:
+        tag = str(item["tag"])
+        lanes = sorted(
+            LANE_DISPLAY_NAMES.get(lane, lane) for lane in tag_to_lanes.get(tag, [])
+        )
+        if lanes:
+            tested_rows.append(
+                (
+                    str(item["name"]),
+                    "<br>".join(lanes),
+                    "covered by executed contract tests",
+                )
+            )
+            continue
+
+        owning_lanes = [
+            lane for lane in LANE_ORDER if tag in all_lane_tags.get(lane, set())
+        ]
+        if owning_lanes and not any(
+            bool(lane_status[lane]["enabled"]) for lane in owning_lanes
+        ):
+            reason = "owning lane was not enabled in this run"
+            expected = "<br>".join(
+                LANE_DISPLAY_NAMES.get(lane, lane) for lane in owning_lanes
+            )
+        elif owning_lanes:
+            reason = "lane executed but no tag mapping was resolved"
+            expected = "<br>".join(
+                LANE_DISPLAY_NAMES.get(lane, lane) for lane in owning_lanes
+            )
+        else:
+            reason = "no CI contract lane is currently assigned to this area"
+            expected = "-"
+        missing_rows.append((str(item["name"]), expected, reason))
+
+    for item in SUPPLEMENTAL_AREAS:
+        lanes = [str(v) for v in cast(Iterable[object], item.get("lanes", ()))]
+        enabled_lanes = [
+            LANE_DISPLAY_NAMES.get(lane, lane)
+            for lane in lanes
+            if bool(lane_status.get(lane, {}).get("enabled"))
+        ]
+        status = str(item.get("status", "gap"))
+        reason = str(item.get("reason", "")) or "no reason recorded"
+        if status == "covered" and enabled_lanes:
+            tested_rows.append((str(item["name"]), "<br>".join(enabled_lanes), reason))
+        else:
+            if lanes:
+                if enabled_lanes:
+                    gap_reason = reason
+                else:
+                    gap_reason = "owning lane was not enabled in this run"
+            else:
+                gap_reason = reason
+            missing_rows.append(
+                (
+                    str(item["name"]),
+                    "<br>".join(LANE_DISPLAY_NAMES.get(lane, lane) for lane in lanes)
+                    or "-",
+                    gap_reason,
+                )
+            )
+
+    tested_rows.sort(key=lambda row: row[0].casefold())
+    missing_rows.sort(key=lambda row: row[0].casefold())
+    return tested_rows, missing_rows
+
+
 def _blocking_items(lane_status: dict[str, dict[str, object]]) -> list[tuple[str, str]]:
     blockers: list[tuple[str, str]] = []
     for lane in LANE_ORDER:
@@ -168,18 +230,6 @@ def _blocking_items(lane_status: dict[str, dict[str, object]]) -> list[tuple[str
         if enabled and result != "success":
             blockers.append((LANE_DISPLAY_NAMES.get(lane, lane), result))
     return blockers
-
-
-def _table(
-    lines: list[str], headers: Sequence[str], rows: Sequence[Sequence[str]]
-) -> None:
-    lines.append("| " + " | ".join(headers) + " |")
-    lines.append("| " + " | ".join("---" for _ in headers) + " |")
-    if rows:
-        for row in rows:
-            lines.append("| " + " | ".join(row) + " |")
-    else:
-        lines.append("| " + " | ".join("-" for _ in headers) + " |")
 
 
 def main() -> None:
@@ -198,6 +248,11 @@ def main() -> None:
     passed_lanes = [
         lane for lane in executed_lanes if str(lane_status[lane]["result"]) == "success"
     ]
+    tested_rows, missing_rows = _capability_run_rows(manifest, lane_status)
+    total_areas = len(tested_rows) + len(missing_rows)
+    coverage_percent = (
+        round((len(tested_rows) / total_areas) * 100, 1) if total_areas else 0.0
+    )
 
     lines: list[str] = [
         "# Final CI workflow summary",
@@ -212,6 +267,11 @@ def main() -> None:
             ("Enabled lanes in this run", str(len(executed_lanes))),
             ("Successful enabled lanes", str(len(passed_lanes))),
             ("Lanes with blocking results", str(len(blockers))),
+            (
+                "Plugin functionality areas covered in this run",
+                f"{len(tested_rows)}/{total_areas}",
+            ),
+            ("Coverage percentage for this run", f"{coverage_percent}%"),
             ("Run URL", args.run_url or "-"),
             ("Source SHA", args.source_sha or "-"),
         ],
@@ -237,14 +297,14 @@ def main() -> None:
         ],
     )
 
-    lines.extend(["", "## High-level lane overview", ""])
+    lines.extend(["", "## Lane overview", ""])
     _table(
         lines,
         (
             "Lane",
-            "Enabled",
+            "Executed",
             "Result",
-            "Why this lane exists",
+            "Purpose",
             "Job tasks executed",
             "Selected test files",
             "Main source areas",
@@ -270,47 +330,45 @@ def main() -> None:
             enabled = bool(lane_status[lane]["enabled"])
             result = str(lane_status[lane]["result"])
             lines.extend([f"#### {LANE_DISPLAY_NAMES.get(lane, lane)}", ""])
-            lines.append(f"- enabled: {checkbox(enabled)}")
+            lines.append(f"- executed: {checkbox(enabled)}")
             lines.append(f"- result: {result}")
             lines.append(f"- purpose: {LANE_PURPOSE.get(lane, '-')}")
-            lines.append(
-                f"- capability areas planned in this lane: {', '.join(_lane_capability_names(manifest, lane)) or '-'}"
-            )
             lines.append("")
             _table(
                 lines,
                 ("Job task", "Files used for the task", "What was tested"),
                 [
-                    (
-                        task.task,
-                        "<br>".join(task.files),
-                        task.description,
-                    )
+                    (task.task, "<br>".join(task.files), task.description)
                     for task in LANE_TASKS.get(lane, ())
                 ],
             )
             lines.append("")
 
-    lines.extend(["## Repository-wide area checklist for this run", ""])
-    _table(
-        lines,
-        ("Tested in this run", "Area", "Source"),
-        [
-            (checkbox(tested), name, source)
-            for name, tested, source in _all_capability_rows(manifest, lane_status)
-        ],
-    )
+    lines.extend(["## Plugin functionality areas tested in this run", ""])
+    _table(lines, ("Area", "Covered by lane(s)", "Evidence"), tested_rows)
+
+    lines.extend(["", "## Areas still missing in this run", ""])
+    _table(lines, ("Area", "Expected lane(s)", "Why it is missing"), missing_rows)
 
     lines.extend(["", "## Reading guide", ""])
     lines.append(
-        "- Enabled/result tell you whether a lane was requested and whether the reusable workflow finished successfully."
+        "- Lane overview shows what actually ran and which test files or runtime checks were attached to that lane."
     )
     lines.append(
-        "- Job tasks executed lists the major checks the lane ran, while Selected test files highlights the contract files tied to that lane."
+        "- Plugin functionality areas tested in this run is the main human-readable coverage section for the finished workflow."
     )
     lines.append(
-        "- The repository-wide checklist is the best place to see which areas were truly exercised in this workflow run versus still marked as not tested."
+        "- Areas still missing in this run explains whether coverage is absent because a lane was disabled or because the CI catalog still has an explicit gap."
     )
+
+    payload = {
+        "lane_status": lane_status,
+        "tested_count": len(tested_rows),
+        "missing_count": len(missing_rows),
+        "coverage_percent": coverage_percent,
+        "tested_rows": tested_rows,
+        "missing_rows": missing_rows,
+    }
 
     text = "\n".join(lines) + "\n"
     output_md = Path(args.output_md)
@@ -318,7 +376,7 @@ def main() -> None:
     output_md.parent.mkdir(parents=True, exist_ok=True)
     output_json.parent.mkdir(parents=True, exist_ok=True)
     output_md.write_text(text, encoding="utf-8")
-    output_json.write_text(json.dumps(lane_status, indent=2) + "\n", encoding="utf-8")
+    output_json.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     print(text, end="")
 
 

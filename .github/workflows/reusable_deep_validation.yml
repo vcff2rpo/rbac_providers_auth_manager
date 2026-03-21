@@ -140,20 +140,32 @@ jobs:
         run: |
           mkdir -p "$DEEP_ARTIFACT_DIR"
           echo "TEST_FILES=$(python scripts/ci/list_contract_tests.py --group '${{ matrix.group-name }}')" >> "$GITHUB_ENV"
+          echo "GROUP_THRESHOLD=$(python scripts/ci/list_contract_tests.py --group '${{ matrix.group-name }}' --threshold)" >> "$GITHUB_ENV"
+          echo "GROUP_COV_TARGETS=$(python scripts/ci/list_contract_tests.py --group '${{ matrix.group-name }}' --cov-targets)" >> "$GITHUB_ENV"
           python scripts/ci/render_ci_scope_summary.py \
-            --title "deep validation shard: ${{ matrix.group-name }}"             --group "${{ matrix.group-name }}"             --output "$DEEP_ARTIFACT_DIR/${{ matrix.group-name }}-scope-${{ matrix.python-version }}.md"
+            --title "deep validation shard: ${{ matrix.group-name }}" \
+            --group "${{ matrix.group-name }}" \
+            --output "$DEEP_ARTIFACT_DIR/${{ matrix.group-name }}-scope-${{ matrix.python-version }}.md"
           cat "$DEEP_ARTIFACT_DIR/${{ matrix.group-name }}-scope-${{ matrix.python-version }}.md" >> "$GITHUB_STEP_SUMMARY"
       - name: Run shard with coverage
         run: |
-          set -o pipefail
+          set -euo pipefail
           mkdir -p "$DEEP_ARTIFACT_DIR"
+          cov_args=()
+          for target in $GROUP_COV_TARGETS; do
+            cov_args+=("--cov=$target")
+          done
+          effective_threshold="$GROUP_THRESHOLD"
+          if [ "${{ inputs['coverage-min'] }}" -gt "$effective_threshold" ]; then
+            effective_threshold="${{ inputs['coverage-min'] }}"
+          fi
           python -m pytest $PYTEST_VERBOSE_ARGS \
             --maxfail=1 \
             --disable-warnings \
-            --cov="$PACKAGE_NAME" \
+            "${cov_args[@]}" \
             --cov-report=term-missing \
             --cov-report=xml:$DEEP_ARTIFACT_DIR/coverage-${{ matrix.group-name }}-${{ matrix.python-version }}.xml \
-            --cov-fail-under=${{ inputs['coverage-min'] }} \
+            --cov-fail-under="$effective_threshold" \
             --junitxml="$DEEP_ARTIFACT_DIR/pytest-${{ matrix.group-name }}-${{ matrix.python-version }}.xml" \
             $TEST_FILES 2>&1 | tee "$DEEP_ARTIFACT_DIR/pytest-${{ matrix.group-name }}-${{ matrix.python-version }}.log"
       - if: always()

@@ -15,38 +15,41 @@ def _load_contract_manifest() -> ModuleType:
     return importlib.import_module("tests.ci.contract_manifest")
 
 
-SUITES = [
-    "quality",
-    "airflow_integration",
-    "identity_provider_integration",
-    "fab_provider_validation",
-    "external_real_validation",
-]
-GROUPS = [
-    "config-permissions-runtime",
-    "role-mapping-rbac-compatibility",
-    "api-ui-browser-session-observability",
-    "provider-backends-and-rate-limits",
-    "audit-logging-governance",
-]
-
-
 def main() -> None:
     manifest = _load_contract_manifest()
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--suite", choices=SUITES)
-    parser.add_argument("--group", choices=GROUPS)
+    parser.add_argument(
+        "--suite",
+        choices=[
+            "quality",
+            "airflow_integration",
+            "identity_provider_integration",
+            "fab_provider_validation",
+            "external_real_validation",
+        ],
+    )
+    parser.add_argument(
+        "--group",
+        choices=[
+            "config-permissions-runtime",
+            "role-mapping-rbac-compatibility",
+            "api-ui-browser-session-observability",
+            "provider-backends-and-rate-limits",
+            "audit-logging-governance",
+        ],
+    )
     parser.add_argument("--family", choices=list(manifest.coverage_family_names()))
     parser.add_argument("--threshold", action="store_true")
     parser.add_argument("--cov-targets", action="store_true")
     args = parser.parse_args()
 
-    if args.family and args.threshold:
-        print(manifest.coverage_family_threshold(args.family))
+    selector = args.family or args.group
+    if selector and args.threshold:
+        print(manifest.coverage_family_threshold(selector))
         return
-    if args.family and args.cov_targets:
-        cov_targets = tuple(manifest.COVERAGE_FAMILIES[args.family]["cov_targets"])
+    if selector and args.cov_targets:
+        cov_targets = tuple(manifest.COVERAGE_FAMILIES[selector]["cov_targets"])
         print(" ".join(cov_targets))
         return
     if args.suite:

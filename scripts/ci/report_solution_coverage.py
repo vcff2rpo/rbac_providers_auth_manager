@@ -83,10 +83,11 @@ def main() -> None:
             f"| {checkbox(False)} | {item['name']} | supplemental CI catalog |"
         )
 
-    lines.extend(["", "## Areas currently marked as not tested", ""])
+    lines.extend(["", "## Missing from the repository CI catalog", ""])
     if gaps or supplemental_gaps:
         for item in [*gaps, *supplemental_gaps]:
-            lines.append(f"- {item['name']}")
+            reason = item.get("reason", "not yet assigned to an implemented CI check")
+            lines.append(f"- {item['name']}: {reason}")
     else:
         lines.append("- none")
 

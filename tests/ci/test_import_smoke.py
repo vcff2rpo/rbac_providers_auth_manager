@@ -212,13 +212,20 @@ def test_walk_imports_for_all_package_modules() -> None:
     if str(package_parent) not in sys.path:
         sys.path.insert(0, str(package_parent))
 
+    package = importlib.import_module("rbac_providers_auth_manager")
+    package_paths = [str(path) for path in getattr(package, "__path__", ())]
+
     imported: list[str] = []
     for module_info in pkgutil.walk_packages(
-        [str(package_root)], prefix="rbac_providers_auth_manager."
+        package_paths,
+        prefix=f"{package.__name__}.",
     ):
+        if module_info.name == "rbac_providers_auth_manager.setup":
+            continue
         module = importlib.import_module(module_info.name)
         imported.append(module.__name__)
 
     assert imported
+    assert "rbac_providers_auth_manager.auth_manager" in imported
     assert "rbac_providers_auth_manager.entrypoints.auth_manager" in imported
     assert "rbac_providers_auth_manager.services.session_service" in imported

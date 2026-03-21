@@ -101,6 +101,15 @@ jobs:
             --constraint "${AIRFLOW_CONSTRAINTS_URL}" \
             -r requirements-airflow-integration.txt
 
+      - name: Install the local package into the Airflow runtime
+        run: |
+          mkdir -p "$AIRFLOW_CI_ARTIFACTS"
+          python -m pip install --no-deps .
+          python - <<'PY' 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/packaged-provider.log"
+          from importlib import metadata
+          print("installed_provider_version=", metadata.version("rbac-providers-auth-manager"))
+          PY
+
       - name: Prepare Airflow directories and stage plugin archive
         run: |
           set -euo pipefail
@@ -241,6 +250,9 @@ jobs:
       - name: Validate login page and protected API behavior
         run: bash scripts/ci/check_airflow_auth_surface.sh
 
+      - name: Resolve Airflow suite tests
+        run: echo "AIRFLOW_SUITE_TESTS=$(python scripts/ci/list_contract_tests.py --suite airflow_integration)" >> "$GITHUB_ENV"
+
       - name: Run Airflow-aware smoke tests with verbose output
         run: |
           set -o pipefail
@@ -248,7 +260,7 @@ jobs:
             --maxfail=1 \
             --disable-warnings \
             --junitxml="$AIRFLOW_CI_ARTIFACTS/pytest-airflow.xml" \
-            tests/ci/test_airflow_smoke.py 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/pytest-airflow.log"
+            $AIRFLOW_SUITE_TESTS 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/pytest-airflow.log"
 
       - name: Stop API server and print final logs
         if: always()
@@ -277,6 +289,7 @@ jobs:
             echo "- auth-login.html"
             echo "- protected-dags.txt"
             echo "- auth-surface.log"
+            echo "- packaged-provider.log"
             echo "- pytest-airflow.log"
           } >> "$GITHUB_STEP_SUMMARY"
 

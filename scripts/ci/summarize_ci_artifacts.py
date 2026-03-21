@@ -3,7 +3,11 @@ from __future__ import annotations
 import argparse
 import json
 import re
-from defusedxml import ElementTree as ET  # type: ignore[import-untyped]
+
+try:
+    from defusedxml import ElementTree as ET  # type: ignore[import-untyped]
+except ModuleNotFoundError:  # pragma: no cover
+    from xml.etree import ElementTree as ET
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 

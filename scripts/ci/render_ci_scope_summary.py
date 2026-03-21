@@ -140,8 +140,6 @@ def _write_summary(
             )
 
     covered = sorted(tag_names[tag] for tag in tags if tag in tag_names)
-    all_names = [str(item["name"]) for item in manifest.CAPABILITY_CATALOG]
-    not_covered = sorted(name for name in all_names if name not in covered)
     source_areas = _source_areas(
         manifest,
         suite=suite,
@@ -160,7 +158,6 @@ def _write_summary(
             ("Selected test files", str(len(tests))),
             ("Primary source/package areas exercised", str(len(source_areas))),
             ("Capability areas covered by this selector", str(len(covered))),
-            ("Capability areas outside this selector", str(len(not_covered))),
         ],
     )
 
@@ -188,9 +185,6 @@ def _write_summary(
 
     lines.extend(["", "## Covered by this selector", ""])
     _table(lines, ("Capability area",), [(name,) for name in covered])
-
-    lines.extend(["", "## Not covered by this selector", ""])
-    _table(lines, ("Capability area",), [(name,) for name in not_covered])
 
     lines.extend(["", "## Result interpretation", ""])
     lines.append("- success: all tests in this selector passed")
