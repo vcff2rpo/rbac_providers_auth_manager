@@ -437,13 +437,130 @@ def build_support_report() -> SupportReport:
     )
 
 
+def _role_membership_map(
+    permissions_by_role: dict[str, tuple[dict[str, str], ...]],
+) -> dict[tuple[str, str], set[str]]:
+    membership: dict[tuple[str, str], set[str]] = {}
+    for role, items in permissions_by_role.items():
+        for item in items:
+            key = (item["resource"], item["action"])
+            membership.setdefault(key, set()).add(role)
+    return membership
+
+
+def _roles_display(roles: set[str]) -> str:
+    ordered = [role for role in ROLE_ORDER if role in roles]
+    return ", ".join(ordered) if ordered else "-"
+
+
+def _role_delta_summary(
+    official_roles: set[str], plugin_roles: set[str]
+) -> tuple[str, str, str]:
+    missing_roles = {role for role in official_roles if role not in plugin_roles}
+    extra_roles = {role for role in plugin_roles if role not in official_roles}
+    if official_roles == plugin_roles:
+        status = "exact-match"
+        explanation = (
+            "Plugin contract matches the official role surface for this permission."
+        )
+    elif official_roles and not plugin_roles:
+        status = "official-only"
+        explanation = "Official FAB exposes this permission, but the plugin contract does not currently grant it."
+    elif plugin_roles and not official_roles:
+        status = "plugin-only"
+        explanation = "Plugin contract grants this permission beyond the official FAB role surface."
+    else:
+        status = "role-drift"
+        explanation = "Permission exists on both sides, but the role progression differs and should be reviewed."
+    delta_bits: list[str] = []
+    if missing_roles:
+        delta_bits.append(f"missing: {_roles_display(missing_roles)}")
+    if extra_roles:
+        delta_bits.append(f"additional: {_roles_display(extra_roles)}")
+    return status, "; ".join(delta_bits) or "-", explanation
+
+
+def _constant_comparison_rows(
+    official: Sequence[str], plugin: Sequence[str]
+) -> list[tuple[str, str, str, str]]:
+    official_set = set(official)
+    plugin_set = set(plugin)
+    rows: list[tuple[str, str, str, str]] = []
+    for item in sorted(official_set | plugin_set):
+        in_official = item in official_set
+        in_plugin = item in plugin_set
+        if in_official and in_plugin:
+            note = "shared constant"
+        elif in_official:
+            note = "official-only constant"
+        else:
+            note = "plugin-only constant"
+        rows.append(
+            (item, "yes" if in_official else "no", "yes" if in_plugin else "no", note)
+        )
+    return rows
+
+
+def _permission_comparison_rows(
+    report: SupportReport,
+) -> list[tuple[str, str, str, str, str, str, str]]:
+    official_map = _role_membership_map(report.official_permissions_by_role)
+    plugin_map = _role_membership_map(report.plugin_contract_permissions_by_role)
+    keys = sorted(set(official_map) | set(plugin_map))
+    rows: list[tuple[str, str, str, str, str, str, str]] = []
+    for resource, action in keys:
+        official_roles = official_map.get((resource, action), set())
+        plugin_roles = plugin_map.get((resource, action), set())
+        status, delta, explanation = _role_delta_summary(official_roles, plugin_roles)
+        rows.append(
+            (
+                resource,
+                action,
+                _roles_display(official_roles),
+                _roles_display(plugin_roles),
+                status,
+                delta,
+                explanation,
+            )
+        )
+    return rows
+
+
+def _compatibility_progression_rows(
+    matrix: tuple[dict[str, object], ...],
+) -> list[tuple[str, str, str, str, str, str, str]]:
+    rows: list[tuple[str, str, str, str, str, str, str]] = []
+    for item in sorted(
+        matrix,
+        key=lambda row: (str(row.get("resource", "")), str(row.get("action", ""))),
+    ):
+        role_status = {role: "-" for role in ROLE_ORDER}
+        for role_name in ROLE_ORDER:
+            if bool(item.get(f"{role_name.lower()}_has_access", False)):
+                role_status[role_name] = "yes"
+            else:
+                role_status[role_name] = "no"
+        rows.append(
+            (
+                str(item.get("resource", "-")),
+                str(item.get("action", "-")),
+                role_status["Viewer"],
+                role_status["User"],
+                role_status["Op"],
+                role_status["Admin"],
+                str(item.get("minimum_role", "-")),
+            )
+        )
+    return rows
+
+
 def render_support_markdown(report: SupportReport) -> str:
     airflow_mod = importlib.import_module("airflow")
     metadata_mod = importlib.import_module("importlib.metadata")
 
     lines = ["# FAB provider support validation", ""]
     lines.append(
-        "This report validates whether the custom plugin design supports the latest official non-DB FAB permission surface."
+        "This report compares the custom plugin RBAC contract against the official FAB provider permission surface using alphabetically sorted matrices so role drift is visible at a glance."
     )
     lines.extend(["", "## CI setup", ""])
     _table(
@@ -457,50 +574,27 @@ def render_support_markdown(report: SupportReport) -> str:
         ],
     )
 
-    lines.extend(["", "## Official FAB / Airflow action constants", ""])
-    _table(
-        lines, ("Action constant",), _constant_rows(report.official_action_constants)
-    )
-    lines.extend(["", "## Custom plugin action constants", ""])
-    _table(lines, ("Action constant",), _constant_rows(report.plugin_action_constants))
-    lines.extend(["", "## Official FAB / Airflow resource constants", ""])
+    lines.extend(["", "## Role coverage overview", ""])
     _table(
         lines,
-        ("Resource constant",),
-        _constant_rows(report.official_resource_constants),
-    )
-    lines.extend(["", "## Custom plugin resource constants", ""])
-    _table(
-        lines, ("Resource constant",), _constant_rows(report.plugin_resource_constants)
-    )
-    lines.extend(["", "## Constant differences", ""])
-    _table(
-        lines,
-        ("Type", "Match", "Missing in plugin", "Additional in plugin"),
-        [
-            (
-                "Actions",
-                "yes" if not report.missing_action_constants_in_plugin else "no",
-                ", ".join(report.missing_action_constants_in_plugin) or "-",
-                ", ".join(report.extra_action_constants_in_plugin) or "-",
-            ),
-            (
-                "Resources",
-                "yes" if not report.missing_resource_constants_in_plugin else "no",
-                ", ".join(report.missing_resource_constants_in_plugin) or "-",
-                ", ".join(report.extra_resource_constants_in_plugin) or "-",
-            ),
-        ],
-    )
-    lines.extend(["", "## Role support summary", ""])
-    _table(
-        lines,
-        ("Role", "Official count", "Plugin-supported count", "Missing", "Additional"),
+        (
+            "Role",
+            "Official permissions",
+            "Plugin-supported official permissions",
+            "Support %",
+            "Official-only gaps",
+            "Plugin-only additions",
+        ),
         [
             (
                 role,
                 str(report.official_permission_counts.get(role, 0)),
                 str(report.supported_permission_counts.get(role, 0)),
+                (
+                    f"{(100 * report.supported_permission_counts.get(role, 0) / report.official_permission_counts.get(role, 1)):.1f}%"
+                    if report.official_permission_counts.get(role, 0)
+                    else "100.0%"
+                ),
                 str(len(report.unsupported_official_permissions_by_role[role])),
                 str(len(report.plugin_extra_permissions_by_role[role])),
             )
@@ -508,30 +602,55 @@ def render_support_markdown(report: SupportReport) -> str:
         ],
     )
 
-    for role in ROLE_ORDER:
-        lines.extend(["", f"## {role}", ""])
-        lines.append("### Official FAB permissions")
-        lines.append("")
-        _table(
-            lines,
-            ("Action", "Resource"),
-            _permission_rows(report.official_permissions_by_role[role]),
-        )
-        lines.extend(["", "### Plugin contract permissions", ""])
-        _table(
-            lines,
-            ("Action", "Resource"),
-            _permission_rows(report.plugin_contract_permissions_by_role[role]),
-        )
-        lines.extend(["", "### Differences", ""])
-        diff_rows: list[tuple[str, str, str]] = [
-            ("missing in plugin support", item["action"], item["resource"])
-            for item in report.unsupported_official_permissions_by_role[role]
-        ] + [
-            ("additional in plugin support", item["action"], item["resource"])
-            for item in report.plugin_extra_permissions_by_role[role]
-        ]
-        _table(lines, ("Type", "Action", "Resource"), diff_rows)
+    lines.extend(["", "## Action constant comparison matrix", ""])
+    _table(
+        lines,
+        ("Action", "Official FAB", "Plugin vocabulary", "Interpretation"),
+        _constant_comparison_rows(
+            report.official_action_constants,
+            report.plugin_action_constants,
+        ),
+    )
+
+    lines.extend(["", "## Resource constant comparison matrix", ""])
+    _table(
+        lines,
+        ("Resource", "Official FAB", "Plugin vocabulary", "Interpretation"),
+        _constant_comparison_rows(
+            report.official_resource_constants,
+            report.plugin_resource_constants,
+        ),
+    )
+
+    lines.extend(["", "## RBAC permission comparison matrix", ""])
+    lines.append(
+        "Rows are sorted by resource and action. The official and plugin role columns show cumulative role membership after normalization."
+    )
+    lines.append("")
+    _table(
+        lines,
+        (
+            "Resource",
+            "Action",
+            "Official roles",
+            "Plugin roles",
+            "Status",
+            "Role delta",
+            "Explanation",
+        ),
+        _permission_comparison_rows(report),
+    )
+
+    lines.extend(["", "## Non-admin role progression matrix", ""])
+    lines.append(
+        "This matrix shows the plugin's intended role ladder for normalized permissions after contract synthesis. It is sorted alphabetically to make drift review easier."
+    )
+    lines.append("")
+    _table(
+        lines,
+        ("Resource", "Action", "Viewer", "User", "Op", "Admin", "Minimum role"),
+        _compatibility_progression_rows(report.compatibility_matrix),
+    )
 
     lines.extend(["", "## Contract advisories", ""])
     if report.contract_advisories:
@@ -545,7 +664,14 @@ def render_support_markdown(report: SupportReport) -> str:
                     str(item.get("issue", "-")),
                     str(item.get("severity", "-")),
                 )
-                for item in report.contract_advisories
+                for item in sorted(
+                    report.contract_advisories,
+                    key=lambda item: (
+                        str(item.get("role", "")),
+                        str(item.get("resource", "")),
+                        str(item.get("issue", "")),
+                    ),
+                )
             ],
         )
     else:
@@ -553,13 +679,16 @@ def render_support_markdown(report: SupportReport) -> str:
 
     lines.extend(["", "## Result interpretation", ""])
     lines.append(
-        "- match: plugin vocabulary or contract includes the official action/resource"
+        "- exact-match: official FAB and plugin contract expose the same role surface for the permission."
     )
     lines.append(
-        "- missing in plugin: official FAB requirement not supported by the plugin contract"
+        "- official-only: official FAB exposes the permission, but the plugin contract does not currently grant it."
     )
     lines.append(
-        "- additional in plugin: plugin defines support beyond the official FAB surface"
+        "- plugin-only: plugin contract grants the permission even though it is not part of the official FAB surface."
+    )
+    lines.append(
+        "- role-drift: both sides expose the permission, but the role ladder differs and should be reviewed before release."
     )
     return "\n".join(lines) + "\n"
 
