@@ -1,0 +1,37 @@
+name: nightly compatibility
+on:
+  schedule:
+  - cron: 17 2 * * *
+  workflow_dispatch: null
+concurrency:
+  group: nightly-compatibility-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+jobs:
+  resolve_ci_context:
+    runs-on: ubuntu-latest
+    outputs:
+      airflow_nightly: ${{ steps.context.outputs.airflow_nightly }}
+      fab_provider_nightly: ${{ steps.context.outputs.fab_provider_nightly }}
+      python_nightly: ${{ steps.context.outputs.python_nightly }}
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+    - uses: ./ci/actions/bootstrap-python
+      with:
+        python-version: '3.13'
+    - id: context
+      uses: ./ci/actions/export-ci-context
+  nightly_compatibility:
+    needs: resolve_ci_context
+    uses: ./.github/workflows/reusable_nightly_compatibility.yml
+    with:
+      package-name: rbac_providers_auth_manager
+      airflow-versions: ${{ needs.resolve_ci_context.outputs.airflow_nightly }}
+      fab-provider-versions: ${{ needs.resolve_ci_context.outputs.fab_provider_nightly }}
+      python-versions: ${{ needs.resolve_ci_context.outputs.python_nightly }}

@@ -1,0 +1,8 @@
+{
+  "kind": "load_config",
+  "expect": "success",
+  "assertions": {
+    "security.allow_insecure_ldap_tls": true,
+    "ldap.allow_self_signed": true
+  }
+}

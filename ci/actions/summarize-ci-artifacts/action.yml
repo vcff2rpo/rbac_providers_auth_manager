@@ -1,0 +1,26 @@
+name: summarize CI artifacts
+description: Render a lane-level artifact summary markdown file and optionally append it to the job summary.
+inputs:
+  artifact-dir:
+    description: Artifact directory to summarize.
+    required: true
+  lane-name:
+    description: Human-readable CI lane name.
+    required: true
+  output-md:
+    description: Output markdown path.
+    required: true
+  append-to-summary:
+    description: Whether to append the summary markdown to GITHUB_STEP_SUMMARY.
+    required: false
+    default: 'true'
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        set -euo pipefail
+        python ci/scripts/summarize_ci_artifacts.py           --artifact-dir "${{ inputs.artifact-dir }}"           --lane-name "${{ inputs.lane-name }}"           --output-md "${{ inputs.output-md }}"
+        if [ "${{ inputs.append-to-summary }}" = "true" ]; then
+          cat "${{ inputs.output-md }}" >> "$GITHUB_STEP_SUMMARY"
+        fi

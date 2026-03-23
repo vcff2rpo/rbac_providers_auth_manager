@@ -1,0 +1,192 @@
+name: reusable deep validation
+on:
+  workflow_call:
+    inputs:
+      package-name:
+        description: Python package name
+        required: false
+        type: string
+        default: rbac_providers_auth_manager
+      python-versions:
+        description: JSON array of Python versions for the unit/mock test matrix
+        required: false
+        type: string
+        default: '["3.12", "3.13"]'
+      coverage-min:
+        description: Minimum acceptable line coverage percent for unit/mock tests
+        required: false
+        type: number
+        default: 25
+permissions:
+  contents: read
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+  DEEP_ARTIFACT_DIR: .ci-artifacts/deep-validation
+  PYTEST_VERBOSE_ARGS: -vv -rA -s --showlocals --durations=20 --log-cli-level=INFO
+jobs:
+  test-catalog:
+    name: test catalog coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+      with: &id001
+        fetch-depth: 0
+    - uses: ./ci/actions/bootstrap-python
+      with:
+        python-version: '3.13'
+    - name: Verify every CI test is assigned to exactly one workflow suite
+      run: "python - <<'PY'\nimport sys\nfrom pathlib import Path\n\nrepo_root = Path.cwd()\nif str(repo_root) not in sys.path:\n    sys.path.insert(0, str(repo_root))\n\nfrom tests.ci.contract_manifest import ALL_ASSIGNED_FILES, discovered_test_files\n\ndiscovered = set(discovered_test_files())\nassigned = set(ALL_ASSIGNED_FILES)\nmissing = sorted(discovered - assigned)\nextra = sorted(assigned - discovered)\nif missing or extra:\n    print('missing=', missing)\n    print('extra=', extra)\n    sys.exit(1)\nprint('All tests/ci files are assigned to exactly one CI suite.')\nPY\n"
+  compile-and-import-smoke:
+    name: compile + import smoke (Python 3.13)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PACKAGE_NAME: ${{ inputs['package-name'] }}
+      PYTHONPATH: ${{ github.workspace }}/..
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+      with: *id001
+    - uses: ./ci/actions/bootstrap-python
+      with:
+        python-version: '3.13'
+        cache-dependency-path: 'ci/requirements/requirements-dev.txt
+
+          tests/ci/*.py
+
+          ci/scripts/*.py
+
+          '
+    - uses: ./ci/actions/install-python-deps
+      with:
+        requirements-files: 'ci/requirements/requirements-dev.txt
+
+          '
+    - run: python -m compileall -q .
+    - name: Import smoke test
+      run: "set -o pipefail\nmkdir -p \"$DEEP_ARTIFACT_DIR\"\npython -m pytest $PYTEST_VERBOSE_ARGS tests/ci/test_import_smoke.py \\\n  --junitxml=\"$DEEP_ARTIFACT_DIR/import-smoke.xml\" 2>&1 | tee \"$DEEP_ARTIFACT_DIR/import-smoke.log\"\n"
+    - if: always()
+      uses: ./ci/actions/summarize-ci-artifacts
+      with:
+        artifact-dir: ${{ env.DEEP_ARTIFACT_DIR }}
+        lane-name: deep validation
+        output-md: ${{ env.DEEP_ARTIFACT_DIR }}/artifact-summary.md
+    - if: always()
+      uses: ./ci/actions/upload-artifact-bundle
+      with:
+        name: deep-validation-import-smoke
+        path: '${{ env.DEEP_ARTIFACT_DIR }}/import-smoke.log
+
+          ${{ env.DEEP_ARTIFACT_DIR }}/import-smoke.xml
+
+          ${{ env.DEEP_ARTIFACT_DIR }}/artifact-summary.md
+
+          ${{ env.DEEP_ARTIFACT_DIR }}/bootstrap-imports-scope.md
+
+          '
+  unit-and-mock-tests:
+    name: unit + mock tests (${{ matrix.group-name }}, Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ${{ fromJson(inputs['python-versions']) }}
+        group-name:
+        - config-permissions-runtime
+        - role-mapping-rbac-compatibility
+        - api-ui-browser-session-observability
+        - provider-backends-and-rate-limits
+        - audit-logging-governance
+    env:
+      PACKAGE_NAME: ${{ inputs['package-name'] }}
+      PYTHONPATH: ${{ github.workspace }}/..
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+      with: *id001
+    - uses: ./ci/actions/bootstrap-python
+      with:
+        python-version: ${{ matrix.python-version }}
+        cache-dependency-path: 'ci/requirements/requirements-dev.txt
+
+          tests/ci/*.py
+
+          ci/scripts/*.py
+
+          '
+    - uses: ./ci/actions/install-python-deps
+      with:
+        requirements-files: 'ci/requirements/requirements-dev.txt
+
+          '
+    - name: Resolve test shard
+      run: 'mkdir -p "$DEEP_ARTIFACT_DIR"
+
+        echo "TEST_FILES=$(python ci/scripts/list_contract_tests.py --group ''${{ matrix.group-name }}'')" >> "$GITHUB_ENV"
+
+        echo "GROUP_THRESHOLD=$(python ci/scripts/list_contract_tests.py --group ''${{ matrix.group-name }}'' --threshold)" >> "$GITHUB_ENV"
+
+        echo "GROUP_COV_TARGETS=$(python ci/scripts/list_contract_tests.py --group ''${{ matrix.group-name }}'' --cov-targets)" >> "$GITHUB_ENV"
+
+        '
+    - uses: ./ci/actions/render-ci-scope-summary
+      with:
+        title: 'deep validation shard: ${{ matrix.group-name }}'
+        group: ${{ matrix.group-name }}
+        output: $DEEP_ARTIFACT_DIR/${{ matrix.group-name }}-scope-${{ matrix.python-version }}.md
+    - name: Run shard with coverage
+      run: "set -euo pipefail\nmkdir -p \"$DEEP_ARTIFACT_DIR\"\ncov_args=()\nfor target in $GROUP_COV_TARGETS; do\n  cov_args+=(\"--cov=$target\")\ndone\neffective_threshold=\"$GROUP_THRESHOLD\"\nif [ \"${{ inputs['coverage-min'] }}\" -gt \"$effective_threshold\" ]; then\n  effective_threshold=\"${{ inputs['coverage-min'] }}\"\nfi\npython -m pytest $PYTEST_VERBOSE_ARGS \\\n  --maxfail=1 \\\n  --disable-warnings \\\n  \"${cov_args[@]}\" \\\n  --cov-report=term-missing \\\n  --cov-report=xml:$DEEP_ARTIFACT_DIR/coverage-${{ matrix.group-name }}-${{ matrix.python-version }}.xml \\\n  --cov-fail-under=\"$effective_threshold\" \\\n  --junitxml=\"$DEEP_ARTIFACT_DIR/pytest-${{ matrix.group-name }}-${{ matrix.python-version }}.xml\" \\\n  $TEST_FILES 2>&1 | tee \"$DEEP_ARTIFACT_DIR/pytest-${{ matrix.group-name }}-${{ matrix.python-version }}.log\"\n"
+    - if: always()
+      uses: ./ci/actions/upload-artifact-bundle
+      with:
+        name: deep-validation-${{ matrix.group-name }}-py${{ matrix.python-version }}
+        path: '${{ env.DEEP_ARTIFACT_DIR }}/coverage-${{ matrix.group-name }}-${{ matrix.python-version }}.xml
+
+          ${{ env.DEEP_ARTIFACT_DIR }}/pytest-${{ matrix.group-name }}-${{ matrix.python-version }}.xml
+
+          ${{ env.DEEP_ARTIFACT_DIR }}/pytest-${{ matrix.group-name }}-${{ matrix.python-version }}.log
+
+          ${{ env.DEEP_ARTIFACT_DIR }}/${{ matrix.group-name }}-scope-${{ matrix.python-version }}.md
+
+          '
+  dead-code:
+    name: dead code scan (Python 3.13)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+      with: *id001
+    - uses: ./ci/actions/bootstrap-python
+      with:
+        python-version: '3.13'
+        cache-dependency-path: 'ci/requirements/requirements-dev.txt
+
+          tests/ci/*.py
+
+          ci/scripts/*.py
+
+          '
+    - uses: ./ci/actions/install-python-deps
+      with:
+        requirements-files: 'ci/requirements/requirements-dev.txt
+
+          '
+        extra-packages: vulture==2.14
+    - run: python -m vulture . tests/ci ci/scripts --exclude .ci-artifacts,ci_review --min-confidence 80
+  summary:
+    name: deep validation summary
+    runs-on: ubuntu-latest
+    if: ${{ always() }}
+    needs:
+    - test-catalog
+    - compile-and-import-smoke
+    - unit-and-mock-tests
+    - dead-code
+    steps:
+    - run: "echo \"test-catalog=${{ needs.test-catalog.result }}\"\necho \"compile-and-import-smoke=${{ needs.compile-and-import-smoke.result }}\"\necho \"unit-and-mock-tests=${{ needs.unit-and-mock-tests.result }}\"\necho \"dead-code=${{ needs.dead-code.result }}\"\n{\n  echo \"# Deep validation summary\"\n  echo\n  echo \"| Job task | Executed | Result | Files or scope used | What was tested |\"\n  echo \"|---|---|---|---|---|\"\n  echo \"| test-catalog | [x] yes | ${{ needs.test-catalog.result }} | tests/ci/test_*.py, tests/ci/contract_manifest.py | every CI test file is assigned to exactly one lane |\"\n  echo \"| compile-and-import-smoke | [x] yes | ${{ needs.compile-and-import-smoke.result }} | repository Python sources, tests/ci/test_import_smoke.py | compilation plus import smoke gate |\"\n  echo \"| unit-and-mock-tests | [x] yes | ${{ needs.unit-and-mock-tests.result }} | config-permissions-runtime, role-mapping-rbac-compatibility, api-ui-browser-session-observability, provider-backends-and-rate-limits,\
+        \ audit-logging-governance shards across Python matrix | deeper functional contracts with coverage |\"\n  echo \"| dead-code | [x] yes | ${{ needs.dead-code.result }} | repository root package, tests/ci/**/*.py, ci/scripts/**/*.py | dead or unreachable code detection |\"\n} >> \"$GITHUB_STEP_SUMMARY\"\n"
+    - run: "results=(\n  \"${{ needs.test-catalog.result }}\"\n  \"${{ needs.compile-and-import-smoke.result }}\"\n  \"${{ needs.unit-and-mock-tests.result }}\"\n  \"${{ needs.dead-code.result }}\"\n)\nfor result in \"${results[@]}\"; do\n  [ \"$result\" = success ] || exit 1\ndone\n"

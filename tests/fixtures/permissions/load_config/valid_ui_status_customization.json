@@ -1,0 +1,13 @@
+{
+  "expect": "success",
+  "assertions": {
+    "ui.title_success": "Welcome to Airflow",
+    "ui.title_failure": "Access denied",
+    "ui.ldap_method_label": "Enterprise LDAP",
+    "ui.entra_method_label": "Microsoft SSO",
+    "ui.ldap_success_text": "LDAP granted access.",
+    "ui.entra_success_text": "Entra granted access.",
+    "ui.show_environment": false,
+    "ui.compact_status_details_line": false
+  }
+}

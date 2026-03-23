@@ -1,0 +1,15 @@
+{
+  "kind": "load_config",
+  "expect": "success",
+  "env": {
+    "ENTRA_CLIENT_SECRET": "dummy-entra-secret"
+  },
+  "assertions": {
+    "general.enable_ldap": true,
+    "general.enable_entra_id": true,
+    "general.strict_permissions": true,
+    "ldap.enabled": true,
+    "entra_id.enabled": true,
+    "validation.has_errors": false
+  }
+}

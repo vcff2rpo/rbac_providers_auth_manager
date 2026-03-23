@@ -1,0 +1,9 @@
+{
+  "kind": "load_config",
+  "expect": "success",
+  "assertions": {
+    "general.enable_ldap": true,
+    "general.enable_entra_id": false,
+    "validation.has_errors": false
+  }
+}

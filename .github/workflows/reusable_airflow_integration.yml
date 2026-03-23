@@ -1,0 +1,235 @@
+name: reusable airflow integration
+on:
+  workflow_call:
+    inputs:
+      package-name:
+        description: Python package name
+        required: false
+        type: string
+        default: rbac_providers_auth_manager
+      airflow-version:
+        description: Airflow version to install
+        required: false
+        type: string
+        default: 3.1.8
+      python-version:
+        description: Python version for integration test
+        required: true
+        type: string
+permissions:
+  contents: read
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+jobs:
+  airflow-integration:
+    name: airflow integration (Python ${{ inputs.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    env:
+      PACKAGE_NAME: ${{ inputs.package-name }}
+      AIRFLOW_VERSION: ${{ inputs.airflow-version }}
+      PYTHONPATH: ''
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+    - uses: ./ci/actions/bootstrap-python
+      with:
+        python-version: ${{ inputs.python-version }}
+        cache-dependency-path: 'ci/requirements/requirements-airflow-integration.txt
+
+          tests/ci/*.py
+
+          '
+    - name: Initialize Airflow runtime paths
+      run: 'echo "AIRFLOW_HOME=${RUNNER_TEMP}/airflow-home" >> "$GITHUB_ENV"
+
+        echo "AIRFLOW_CONFIG=${RUNNER_TEMP}/airflow-home/airflow.cfg" >> "$GITHUB_ENV"
+
+        echo "AIRFLOW_DATA_DIR=${RUNNER_TEMP}/airflow-home/data" >> "$GITHUB_ENV"
+
+        echo "AIRFLOW_PLUGINS_DIR=${RUNNER_TEMP}/airflow-home/plugins" >> "$GITHUB_ENV"
+
+        echo "AIRFLOW_DAGS_DIR=${RUNNER_TEMP}/airflow-home/dags" >> "$GITHUB_ENV"
+
+        echo "AIRFLOW_DB_PATH=${RUNNER_TEMP}/airflow-home/airflow.db" >> "$GITHUB_ENV"
+
+        echo "AIRFLOW_PLUGIN_ZIP=${RUNNER_TEMP}/airflow-home/plugins/rbac_providers_auth_manager.zip" >> "$GITHUB_ENV"
+
+        echo "AIRFLOW_PERMISSIONS_INI=${RUNNER_TEMP}/airflow-home/plugins/rbac_providers_auth_manager_permissions.ini" >> "$GITHUB_ENV"
+
+        echo "AIRFLOW_CI_ARTIFACTS=${RUNNER_TEMP}/airflow-artifacts" >> "$GITHUB_ENV"
+
+        '
+    - name: Show context
+      run: 'echo "Repository:              $GITHUB_REPOSITORY"
+
+        echo "Ref:                     $GITHUB_REF"
+
+        echo "SHA:                     $GITHUB_SHA"
+
+        echo "Python:                  $(python --version)"
+
+        echo "Airflow:                 ${AIRFLOW_VERSION}"
+
+        echo "AIRFLOW_HOME:            $AIRFLOW_HOME"
+
+        echo "AIRFLOW_CONFIG:          $AIRFLOW_CONFIG"
+
+        echo "AIRFLOW_PLUGINS_DIR:     $AIRFLOW_PLUGINS_DIR"
+
+        echo "AIRFLOW_DAGS_DIR:        $AIRFLOW_DAGS_DIR"
+
+        echo "AIRFLOW_DATA_DIR:        $AIRFLOW_DATA_DIR"
+
+        echo "AIRFLOW_DB_PATH:         $AIRFLOW_DB_PATH"
+
+        echo "AIRFLOW_PLUGIN_ZIP:      $AIRFLOW_PLUGIN_ZIP"
+
+        echo "AIRFLOW_PERMISSIONS_INI: $AIRFLOW_PERMISSIONS_INI"
+
+        echo "AIRFLOW_CI_ARTIFACTS:    $AIRFLOW_CI_ARTIFACTS"
+
+        '
+    - name: Upgrade packaging tools
+      run: python -m pip install --upgrade pip setuptools wheel
+    - uses: ./ci/actions/install-ldap-build-deps
+      with:
+        extra-apt-packages: curl jq
+    - uses: ./ci/actions/resolve-airflow-constraints
+      with:
+        airflow-version: ${{ inputs.airflow-version }}
+        python-version: ${{ inputs.python-version }}
+    - name: Install Airflow core with matching constraints
+      run: "python -m pip install \"apache-airflow==${AIRFLOW_VERSION}\" \\\n  --constraint \"${AIRFLOW_CONSTRAINTS_URL}\"\n"
+    - name: Install Airflow integration test dependencies without overriding Airflow pins
+      run: "python -m pip install \\\n  --constraint \"${AIRFLOW_CONSTRAINTS_URL}\" \\\n  -r ci/requirements/requirements-airflow-integration.txt\n"
+    - name: Install the local package into the Airflow runtime
+      run: 'mkdir -p "$AIRFLOW_CI_ARTIFACTS"
+
+        python -m pip install --no-deps .
+
+        python - <<''PY'' 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/packaged-provider.log"
+
+        from importlib import metadata
+
+        print("installed_provider_version=", metadata.version("rbac-providers-auth-manager"))
+
+        PY
+
+        '
+    - name: Prepare Airflow directories and stage plugin archive
+      run: 'set -euo pipefail
+
+        mkdir -p "$AIRFLOW_HOME" "$AIRFLOW_DATA_DIR" "$AIRFLOW_PLUGINS_DIR" "$AIRFLOW_DAGS_DIR" "$AIRFLOW_CI_ARTIFACTS"
+
+        python ci/scripts/bootstrap_airflow_runtime.py
+
+        '
+    - name: Export plugin archive into PYTHONPATH
+      run: echo "PYTHONPATH=${AIRFLOW_PLUGIN_ZIP}" >> "$GITHUB_ENV"
+    - name: Create hello world DAG fixture
+      run: python ci/scripts/create_hello_world_dag.py
+    - name: Create and patch airflow.cfg
+      run: 'set -euo pipefail
+
+        python ci/scripts/write_airflow_ci_config.py
+
+        '
+    - name: Airflow info
+      run: 'set -o pipefail
+
+        python -m airflow info 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/airflow-info.log"
+
+        '
+    - name: Debug Python import path
+      run: 'python - <<''PY'' 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/python-path.log"
+
+        import os
+
+        import sys
+
+        print("cwd =", os.getcwd())
+
+        print("PYTHONPATH =", os.environ.get("PYTHONPATH"))
+
+        print("sys.path =", sys.path)
+
+        PY
+
+        '
+    - name: Pre-DB auth manager import and ldap smoke
+      run: 'python - <<''PY'' 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/auth-manager-import.log"
+
+        import os
+
+        import sys
+
+        import ldap
+
+        print("plugin zip =", os.environ["AIRFLOW_PLUGIN_ZIP"])
+
+        print("effective sys.path =", sys.path)
+
+        print("python-ldap version =", getattr(ldap, "__version__", "unknown"))
+
+        from rbac_providers_auth_manager.auth_manager import RbacAuthManager
+
+        print("loaded auth manager =", RbacAuthManager.__name__)
+
+        PY
+
+        '
+    - name: Negative runtime smoke for missing auth manager class
+      run: "set -euo pipefail\nBAD_CFG=\"$AIRFLOW_CI_ARTIFACTS/airflow-bad-auth-manager.cfg\"\ncp \"$AIRFLOW_CONFIG\" \"$BAD_CFG\"\npython - <<'PY'\nimport configparser\nimport os\nfrom pathlib import Path\n\ncfg_path = Path(os.environ[\"AIRFLOW_CI_ARTIFACTS\"]) / \"airflow-bad-auth-manager.cfg\"\ncfg = configparser.ConfigParser()\ncfg.read(cfg_path)\ncfg[\"core\"][\"auth_manager\"] = \"missing.module.DoesNotExist\"\nwith cfg_path.open(\"w\", encoding=\"utf-8\") as fh:\n    cfg.write(fh)\nprint(f\"wrote bad auth manager cfg to {cfg_path}\")\nPY\n\nset +e\nAIRFLOW_CONFIG=\"$BAD_CFG\" python -W \"ignore:Could not import graphviz:UserWarning\" -m airflow info >\"$AIRFLOW_CI_ARTIFACTS/airflow-bad-auth-manager.log\" 2>&1\nAIRFLOW_INFO_RC=$?\nset -e\n\ncat \"$AIRFLOW_CI_ARTIFACTS/airflow-bad-auth-manager.log\"\ngrep -E \"missing\\.module|DoesNotExist|auth_manager|ImportError|ModuleNotFoundError|cannot load CLI commands from auth manager|Auth manager is not configured\" \"$AIRFLOW_CI_ARTIFACTS/airflow-bad-auth-manager.log\"\
+        \n\nif [ \"$AIRFLOW_INFO_RC\" -eq 0 ]; then\n  echo \"airflow info returned success, but emitted expected invalid-auth-manager warnings; treating as expected for this setup\"\nelse\n  echo \"airflow info failed as expected for invalid auth manager config\"\nfi\n"
+    - name: Airflow DB bootstrap smoke with verbose logs
+      run: 'set -o pipefail
+
+        AIRFLOW__LOGGING__LOGGING_LEVEL=DEBUG python -m airflow db migrate 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/airflow-db-migrate.log"
+
+        '
+    - name: Discover hello world DAG and tasks using plain-text Airflow CLI
+      run: bash ci/bash/check_airflow_discovery.sh
+    - name: Execute hello world DAG test run
+      run: 'set -o pipefail
+
+        python -m airflow dags test hello_world_ci 2026-03-19T00:00:00+00:00 2>&1 | tee "$AIRFLOW_CI_ARTIFACTS/airflow-dags-test.log"
+
+        '
+    - name: Start API server and capture verbose logs
+      run: "set -e\nAIRFLOW__LOGGING__LOGGING_LEVEL=DEBUG python -m airflow api-server >\"$AIRFLOW_CI_ARTIFACTS/api-server.log\" 2>&1 &\nAPI_PID=$!\necho \"$API_PID\" > \"$AIRFLOW_CI_ARTIFACTS/api-server.pid\"\necho \"api-server pid=$API_PID\"\n\nfor i in $(seq 1 40); do\n  if curl -fsS \"http://127.0.0.1:8080/api/v2/monitor/health\" >\"$AIRFLOW_CI_ARTIFACTS/health.json\"; then\n    break\n  fi\n  sleep 2\ndone\n\ncurl -fsS \"http://127.0.0.1:8080/api/v2/version\" >\"$AIRFLOW_CI_ARTIFACTS/version.json\"\n\necho \"==> api-server log tail\"\ntail -n 200 \"$AIRFLOW_CI_ARTIFACTS/api-server.log\" || true\n\nif ! ps -p \"$API_PID\" >/dev/null 2>&1; then\n  echo \"api-server exited unexpectedly\"\n  exit 1\nfi\n\nif [ ! -s \"$AIRFLOW_CI_ARTIFACTS/health.json\" ]; then\n  echo \"health endpoint did not respond\"\n  exit 1\nfi\n\npython - <<'PY'\nimport json\nimport os\nfrom pathlib import Path\n\nartifacts = Path(os.environ[\"AIRFLOW_CI_ARTIFACTS\"])\nhealth = json.loads((artifacts / \"health.json\"\
+        ).read_text(encoding=\"utf-8\"))\nversion = json.loads((artifacts / \"version.json\").read_text(encoding=\"utf-8\"))\nmetadb = (health.get(\"metadatabase\") or {}).get(\"status\")\nif metadb != \"healthy\":\n    raise SystemExit(f\"metadatabase health is not healthy: {metadb!r}\")\nprint(\"validated metadatabase health:\", metadb)\nprint(\"api version payload keys:\", sorted(version.keys()))\nPY\n"
+    - name: Validate login page and protected API behavior
+      run: bash ci/bash/check_airflow_auth_surface.sh
+    - name: Resolve Airflow suite tests
+      run: echo "AIRFLOW_SUITE_TESTS=$(python ci/scripts/list_contract_tests.py --suite airflow_integration)" >> "$GITHUB_ENV"
+    - name: Run Airflow-aware smoke tests with verbose output
+      run: "set -o pipefail\npython -m pytest -vv -rA -s --showlocals --durations=20 --log-cli-level=INFO \\\n  --maxfail=1 \\\n  --disable-warnings \\\n  --junitxml=\"$AIRFLOW_CI_ARTIFACTS/pytest-airflow.xml\" \\\n  $AIRFLOW_SUITE_TESTS 2>&1 | tee \"$AIRFLOW_CI_ARTIFACTS/pytest-airflow.log\"\n"
+    - name: Stop API server and print final logs
+      if: always()
+      run: "if [ -f \"$AIRFLOW_CI_ARTIFACTS/api-server.pid\" ]; then\n  API_PID=\"$(cat \"$AIRFLOW_CI_ARTIFACTS/api-server.pid\")\"\n  kill \"$API_PID\" >/dev/null 2>&1 || true\n  wait \"$API_PID\" >/dev/null 2>&1 || true\nfi\necho \"==> final api-server log tail\"\nif [ -f \"$AIRFLOW_CI_ARTIFACTS/api-server.log\" ]; then\n  tail -n 200 \"$AIRFLOW_CI_ARTIFACTS/api-server.log\" || true\nfi\n{\n  echo \"# Airflow integration summary\"\n  echo \"\"\n  echo \"- airflow-info.log\"\n  echo \"- airflow-db-migrate.log\"\n  echo \"- airflow-dags-list.log\"\n  echo \"- airflow-tasks-list.log\"\n  echo \"- airflow-dag-rendering-skipped.log\"\n  echo \"- airflow-dags-test.log\"\n  echo \"- api-server.log\"\n  echo \"- health.json\"\n  echo \"- version.json\"\n  echo \"- auth-login.html\"\n  echo \"- protected-dags.txt\"\n  echo \"- auth-surface.log\"\n  echo \"- packaged-provider.log\"\n  echo \"- pytest-airflow.log\"\n} >> \"$GITHUB_STEP_SUMMARY\"\n"
+    - uses: ./ci/actions/render-ci-scope-summary
+      if: always()
+      with:
+        title: airflow integration scope
+        suite: airflow_integration
+        output: $AIRFLOW_CI_ARTIFACTS/airflow-scope.md
+    - name: Build airflow integration artifact summary
+      if: always()
+      uses: ./ci/actions/summarize-ci-artifacts
+      with:
+        artifact-dir: ${{ env.AIRFLOW_CI_ARTIFACTS }}
+        lane-name: airflow integration
+        output-md: ${{ env.AIRFLOW_CI_ARTIFACTS }}/artifact-summary.md
+    - name: Upload Airflow integration artifacts
+      if: always()
+      uses: ./ci/actions/upload-artifact-bundle
+      with:
+        name: airflow-integration-py${{ inputs.python-version }}
+        path: '${{ env.AIRFLOW_CI_ARTIFACTS }}
+
+          ${{ env.AIRFLOW_CI_ARTIFACTS }}/airflow-scope.md
+
+          '

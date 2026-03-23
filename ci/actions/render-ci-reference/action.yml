@@ -1,0 +1,35 @@
+name: render CI reference bundle
+description: Render CI-owned reference documents and optionally append them to the job summary.
+inputs:
+  repo-root:
+    description: Repository root for rendering.
+    required: false
+    default: '.'
+  output-dir:
+    description: Directory where rendered files should be written.
+    required: true
+  append-to-summary:
+    description: Whether to append rendered markdown documents to GITHUB_STEP_SUMMARY.
+    required: false
+    default: 'true'
+runs:
+  using: composite
+  steps:
+    - name: Render CI reference artifacts
+      shell: bash
+      run: |
+        set -euo pipefail
+        out_dir="${{ inputs.output-dir }}"
+        mkdir -p "$out_dir"
+        python ci/scripts/render_ci_inventory.py           --repo-root "${{ inputs.repo-root }}"           --output-md "$out_dir/ci-inventory.md"           --output-json "$out_dir/ci-inventory.json"
+        python ci/scripts/ci_versions.py           --markdown           --output "$out_dir/ci-versions.md"
+        python ci/scripts/ci_path_filters.py           --markdown           --output "$out_dir/ci-path-filters.md"
+        python ci/scripts/render_ci_workflow_inputs.py           --repo-root "${{ inputs.repo-root }}"           --output-md "$out_dir/ci-workflow-inputs.md"           --output-json "$out_dir/ci-workflow-inputs.json"
+        python ci/scripts/render_ci_reference.py           --repo-root "${{ inputs.repo-root }}"           --output-md "$out_dir/ci-reference.md"           --output-json "$out_dir/ci-reference.json"
+        if [ "${{ inputs.append-to-summary }}" = "true" ]; then
+          cat "$out_dir/ci-inventory.md" >> "$GITHUB_STEP_SUMMARY"
+          cat "$out_dir/ci-versions.md" >> "$GITHUB_STEP_SUMMARY"
+          cat "$out_dir/ci-path-filters.md" >> "$GITHUB_STEP_SUMMARY"
+          cat "$out_dir/ci-workflow-inputs.md" >> "$GITHUB_STEP_SUMMARY"
+          cat "$out_dir/ci-reference.md" >> "$GITHUB_STEP_SUMMARY"
+        fi

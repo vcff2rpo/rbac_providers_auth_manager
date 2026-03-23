@@ -1,0 +1,8 @@
+{
+  "expect": "success",
+  "assertions": {
+    "role_filters.role_to_filters.ScopedCasefolded.dag_tags": ["critical", "finance"],
+    "role_filters.role_to_filters.ScopedCasefolded.environments": ["prod"],
+    "role_filters.role_to_filters.ScopedCasefolded.resource_prefixes": ["finance_"]
+  }
+}

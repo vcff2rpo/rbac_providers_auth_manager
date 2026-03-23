@@ -1,0 +1,22 @@
+{
+  "python": {
+    "primary": "3.13",
+    "secondary": "3.12",
+    "deep_validation": ["3.12", "3.13"],
+    "nightly": ["3.12", "3.13"]
+  },
+  "airflow": {
+    "default": "3.1.8",
+    "nightly": ["3.1.8"]
+  },
+  "fab_provider": {
+    "default": "3.5.0",
+    "nightly": ["3.5.0"]
+  },
+  "requirements": {
+    "dev": "ci/requirements/requirements-dev.txt",
+    "airflow_integration": "ci/requirements/requirements-airflow-integration.txt",
+    "external_real_validation": "ci/requirements/requirements-external-real-validation.txt",
+    "fab_provider_validation": "ci/requirements/requirements-fab-provider-validation.txt"
+  }
+}

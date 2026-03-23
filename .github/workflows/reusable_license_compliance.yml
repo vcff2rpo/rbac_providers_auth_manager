@@ -1,0 +1,310 @@
+name: reusable license compliance
+on:
+  workflow_call:
+    inputs:
+      package-name:
+        description: Python package name
+        required: false
+        type: string
+        default: rbac_providers_auth_manager
+      python-version:
+        description: Python version for compliance tooling
+        required: false
+        type: string
+        default: '3.13'
+permissions:
+  contents: read
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+  LICENSE_ARTIFACT_DIR: .ci-artifacts/license
+jobs:
+  requirements_usage:
+    name: requirements usage
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+      with: &id001
+        fetch-depth: 0
+    - uses: ./ci/actions/bootstrap-python
+      with:
+        python-version: ${{ inputs.python-version }}
+    - name: Report requirements file usage
+      run: 'set -o pipefail
+
+        mkdir -p "$LICENSE_ARTIFACT_DIR"
+
+        python ci/scripts/report_requirements_usage.py             --repo-root .             --output-md "$LICENSE_ARTIFACT_DIR/requirements-usage.md"             --output-json "$LICENSE_ARTIFACT_DIR/requirements-usage.json"             2>&1 | tee "$LICENSE_ARTIFACT_DIR/requirements-usage.log"
+
+        '
+    - name: Upload requirements usage artifacts
+      if: always()
+      uses: ./ci/actions/upload-artifact-bundle
+      with:
+        name: requirements-usage
+        path: ${{ env.LICENSE_ARTIFACT_DIR }}
+  license_compliance:
+    name: license compliance
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: requirements_usage
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+      with: *id001
+    - uses: ./ci/actions/bootstrap-python
+      with:
+        python-version: ${{ inputs.python-version }}
+    - name: Install license tooling
+      run: 'python -m pip install --upgrade pip setuptools wheel
+
+        python -m pip install pip-licenses==5.0.0 reuse==5.0.2
+
+        python -m pip check
+
+        '
+    - name: Run license compliance scan
+      run: 'set -o pipefail
+
+        mkdir -p "$LICENSE_ARTIFACT_DIR"
+
+        python ci/scripts/check_license_compliance.py             --repo-root .             --output-md "$LICENSE_ARTIFACT_DIR/license-compliance.md"             --output-json "$LICENSE_ARTIFACT_DIR/license-compliance.json"             2>&1 | tee "$LICENSE_ARTIFACT_DIR/license-compliance.log"
+
+        '
+    - name: Upload license artifacts
+      if: always()
+      uses: ./ci/actions/upload-artifact-bundle
+      with:
+        name: license-compliance
+        path: ${{ env.LICENSE_ARTIFACT_DIR }}
+  release_readiness:
+    name: release readiness
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+      with: *id001
+    - uses: ./ci/actions/bootstrap-python
+      with:
+        python-version: ${{ inputs.python-version }}
+    - name: Check release readiness and repository hygiene
+      run: 'set -o pipefail
+
+        mkdir -p "$LICENSE_ARTIFACT_DIR"
+
+        python ci/scripts/check_release_readiness.py             --repo-root .             --output-md "$LICENSE_ARTIFACT_DIR/release-readiness.md"             --output-json "$LICENSE_ARTIFACT_DIR/release-readiness.json"             2>&1 | tee "$LICENSE_ARTIFACT_DIR/release-readiness.log"
+
+        '
+    - name: Upload release readiness artifacts
+      if: always()
+      uses: ./ci/actions/upload-artifact-bundle
+      with:
+        name: release-readiness
+        path: ${{ env.LICENSE_ARTIFACT_DIR }}
+  build_distribution:
+    name: build distribution
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+      with: *id001
+    - uses: ./ci/actions/bootstrap-python
+      with:
+        python-version: ${{ inputs.python-version }}
+    - name: Build sdist and wheel
+      run: 'set -o pipefail
+
+        mkdir -p "$LICENSE_ARTIFACT_DIR"
+
+        python -m pip install --upgrade pip setuptools wheel build==1.3.0
+
+        python -m build --sdist --wheel . 2>&1 | tee "$LICENSE_ARTIFACT_DIR/build-distribution.log"
+
+        ls -1 dist > "$LICENSE_ARTIFACT_DIR/build-distribution-files.txt"
+
+        '
+    - name: Upload build artifacts
+      if: always()
+      uses: ./ci/actions/upload-artifact-bundle
+      with:
+        name: build-distribution
+        path: '${{ env.LICENSE_ARTIFACT_DIR }}/build-distribution.log
+
+          ${{ env.LICENSE_ARTIFACT_DIR }}/build-distribution-files.txt
+
+          dist/*
+
+          '
+  build_install_smoke:
+    name: built distribution install smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: build_distribution
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+      with: *id001
+    - uses: ./ci/actions/bootstrap-python
+      with:
+        python-version: ${{ inputs.python-version }}
+    - name: Build and install wheel in an isolated virtual environment
+      run: 'set -euo pipefail
+
+        mkdir -p "$LICENSE_ARTIFACT_DIR"
+
+        python -m pip install --upgrade pip setuptools wheel build==1.3.0
+
+        python -m build --wheel .
+
+        python -m venv .venv-built-smoke
+
+        . .venv-built-smoke/bin/activate
+
+        python -m pip install --upgrade pip
+
+        python -m pip install --no-deps dist/*.whl
+
+        python - <<''PY'' 2>&1 | tee "$LICENSE_ARTIFACT_DIR/build-install-smoke.log"
+
+        from importlib import metadata
+
+        import rbac_providers_auth_manager
+
+        print("installed_distribution=", metadata.version("rbac-providers-auth-manager"))
+
+        print("package_version=", rbac_providers_auth_manager.__version__)
+
+        PY
+
+        '
+    - name: Upload build install smoke artifacts
+      if: always()
+      uses: ./ci/actions/upload-artifact-bundle
+      with:
+        name: build-install-smoke
+        path: '${{ env.LICENSE_ARTIFACT_DIR }}/build-install-smoke.log
+
+          dist/*
+
+          '
+  sbom:
+    name: sbom
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+      with: *id001
+    - uses: ./ci/actions/bootstrap-python
+      with:
+        python-version: ${{ inputs.python-version }}
+    - name: Install SBOM tooling
+      run: 'python -m pip install --upgrade pip setuptools wheel
+
+        python -m pip install cyclonedx-bom==7.2.1
+
+        python -m pip check
+
+        '
+    - name: Generate SBOM
+      run: 'set -o pipefail
+
+        mkdir -p "$LICENSE_ARTIFACT_DIR"
+
+        cyclonedx-py environment --of JSON -o "$LICENSE_ARTIFACT_DIR/sbom.json"
+
+        cyclonedx-py environment --of XML -o "$LICENSE_ARTIFACT_DIR/sbom.xml"
+
+        python ci/scripts/summarize_sbom.py             --sbom-json "$LICENSE_ARTIFACT_DIR/sbom.json"             --output-md "$LICENSE_ARTIFACT_DIR/sbom-summary.md"             2>&1 | tee "$LICENSE_ARTIFACT_DIR/sbom.log"
+
+        '
+    - name: Upload SBOM artifacts
+      if: always()
+      uses: ./ci/actions/upload-artifact-bundle
+      with:
+        name: sbom
+        path: ${{ env.LICENSE_ARTIFACT_DIR }}
+  static_security:
+    name: static security
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+      with: *id001
+    - uses: ./ci/actions/bootstrap-python
+      with:
+        python-version: ${{ inputs.python-version }}
+    - name: Install static security tooling
+      run: 'python -m pip install --upgrade pip setuptools wheel
+
+        python -m pip install bandit[toml]==1.8.6 build==1.3.0
+
+        '
+    - name: Install Gitleaks binary
+      run: 'curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.24.2/gitleaks_8.24.2_linux_x64.tar.gz -o /tmp/gitleaks.tar.gz
+
+        tar -xzf /tmp/gitleaks.tar.gz -C /tmp
+
+        sudo mv /tmp/gitleaks /usr/local/bin/gitleaks
+
+        '
+    - name: Run Bandit and capture exit code
+      run: 'set +e
+
+        mkdir -p "$LICENSE_ARTIFACT_DIR"
+
+        python -m bandit -q -r . -x tests,ci/scripts,.ci-artifacts,ci_review -c pyproject.toml -f txt -o "$LICENSE_ARTIFACT_DIR/bandit.txt"
+
+        BANDIT_RC=$?
+
+        echo "bandit_rc=$BANDIT_RC" >> "$GITHUB_ENV"
+
+        set -e
+
+        '
+    - name: Run Gitleaks and capture exit code
+      run: 'set +e
+
+        gitleaks detect --source . --config .gitleaks.toml --report-path "$LICENSE_ARTIFACT_DIR/gitleaks.json" --no-banner
+
+        GITLEAKS_RC=$?
+
+        echo "gitleaks_rc=$GITLEAKS_RC" >> "$GITHUB_ENV"
+
+        set -e
+
+        '
+    - name: Render static security summary
+      run: 'python ci/scripts/render_static_security_summary.py             --bandit "$LICENSE_ARTIFACT_DIR/bandit.txt"             --gitleaks "$LICENSE_ARTIFACT_DIR/gitleaks.json"             --bandit-rc "${bandit_rc:-1}"             --gitleaks-rc "${gitleaks_rc:-1}"             --output-md "$LICENSE_ARTIFACT_DIR/static-security.md"             --output-json "$LICENSE_ARTIFACT_DIR/static-security.json"
+
+        cat "$LICENSE_ARTIFACT_DIR/static-security.md" >> "$GITHUB_STEP_SUMMARY"
+
+        '
+    - name: Upload static security artifacts
+      if: always()
+      uses: ./ci/actions/upload-artifact-bundle
+      with:
+        name: static-security
+        path: ${{ env.LICENSE_ARTIFACT_DIR }}
+    - name: Fail on security findings
+      run: "if [ \"${bandit_rc:-1}\" != \"0\" ] || [ \"${gitleaks_rc:-1}\" != \"0\" ]; then\n  echo \"Static security tooling reported findings. Inspect static-security.md and the raw reports.\"\n  exit 1\nfi\n"
+  summary:
+    name: license compliance summary
+    runs-on: ubuntu-latest
+    if: ${{ always() }}
+    needs:
+    - requirements_usage
+    - license_compliance
+    - release_readiness
+    - build_distribution
+    - build_install_smoke
+    - sbom
+    - static_security
+    steps:
+    - name: Print lane result summary
+      run: "{\n  echo \"# License compliance lane\"\n  echo\n  echo \"| Job | Executed | Result | Files used | What was checked |\"\n  echo \"|---|---|---|---|---|\"\n  echo \"| requirements_usage | [x] yes | ${{ needs.requirements_usage.result }} | ci/requirements/*.txt, .github/workflows/*.yml | requirements file usage across workflows |\"\n  echo \"| license_compliance | [x] yes | ${{ needs.license_compliance.result }} | LICENSE, NOTICE, REUSE.toml, LICENSES/Apache-2.0.txt, repository sources | Apache distribution files, REUSE metadata, dependency license scan, source heuristic scan |\"\n  echo \"| release_readiness | [x] yes | ${{ needs.release_readiness.result }} | README.md, py.typed, pyproject.toml/setup.py, repository hygiene | release-readiness and committed cache/build-artefact checks |\"\n  echo \"| build_distribution | [x] yes | ${{ needs.build_distribution.result }} | pyproject.toml, setup.py, repository sources | sdist and wheel build smoke for release packaging |\"\n  echo\
+        \ \"| build_install_smoke | [x] yes | ${{ needs.build_install_smoke.result }} | built wheel, isolated virtual environment | built wheel installation smoke and version metadata import |\"\n  echo \"| sbom | [x] yes | ${{ needs.sbom.result }} | installed environment | CycloneDX SBOM JSON/XML generation |\"\n  echo \"| static_security | [x] yes | ${{ needs.static_security.result }} | repository sources, .gitleaks.toml | Bandit plus Gitleaks static scanning with finding summary |\"\n} >> \"$GITHUB_STEP_SUMMARY\"\nfor result in             \"${{ needs.requirements_usage.result }}\"             \"${{ needs.license_compliance.result }}\"             \"${{ needs.release_readiness.result }}\"             \"${{ needs.build_distribution.result }}\"             \"${{ needs.build_install_smoke.result }}\"             \"${{ needs.sbom.result }}\"             \"${{ needs.static_security.result }}\"\ndo\n  if [ \"$result\" != \"success\" ]; then\n    exit 1\n  fi\ndone\n"
