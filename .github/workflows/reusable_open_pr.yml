@@ -8,8 +8,8 @@ on:
       review_branch_prefix: {type: string, required: false, default: ready/feature-branch}
       core_only_manifest: {type: string, required: false, default: 'ci/config/core_promotion_allowlist.txt'}
       pr_title: {type: string, required: false, default: 'Review: feature-branch ready for main'}
-      ci_self_check_result: {type: string, required: false, default: success}
       quality_result: {type: string, required: false, default: unknown}
+      ci_self_check_result: {type: string, required: false, default: unknown}
       deep_validation_result: {type: string, required: false, default: unknown}
       airflow_result: {type: string, required: false, default: unknown}
       idp_result: {type: string, required: false, default: unknown}
@@ -124,8 +124,8 @@ jobs:
               `Workflow run: ${{ inputs.run_url }}`,
               '',
               'CI result summary:',
-              `- ci-self-check: ${{ inputs.ci_self_check_result || 'success' }}`,
               `- quality: ${{ inputs.quality_result }}`,
+              `- ci-self-check: ${{ inputs.ci_self_check_result }}`,
               `- deep-validation: ${{ inputs.deep_validation_result }}`,
               `- airflow-integration: ${{ inputs.airflow_result }}`,
               `- identity-provider-integration: ${{ inputs.idp_result }}`,

@@ -171,9 +171,9 @@ jobs:
       base-branch: main
       review-branch-prefix: ${{ format('ready/{0}', github.ref_name) }}
       pr-title: '${{ format(''Review: {0} ready for main'', github.ref_name) }}'
-      ci-self-check-enabled: 'true'
-      ci-self-check-result: ${{ needs.ci_self_check.result }}
       quality-result: ${{ needs.quality.result }}
+      ci-self-check-enabled: true
+      ci-self-check-result: ${{ needs.ci_self_check.result }}
       deep-validation-enabled: ${{ inputs.run_deep_validation }}
       deep-validation-result: ${{ inputs.run_deep_validation && needs.deep_validation.result || 'skipped' }}
       airflow-enabled: ${{ inputs.run_airflow }}
