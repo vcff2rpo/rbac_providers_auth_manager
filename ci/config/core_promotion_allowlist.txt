@@ -2,13 +2,8 @@
 # These repository-relative paths are copied from the validated source branch into
 # the prepared promotion branch. Everything else is removed from the promotion
 # branch so main only receives the intended core plugin payload.
-.editorconfig
-.gitattributes
-.github/
 .gitignore
-.gitleaks.toml
 LICENSE
-LICENSES/
 NOTICE
 README.md
 REUSE.toml
@@ -16,20 +11,13 @@ __init__.py
 api/
 auth_manager.py
 authorization/
-ci/
 compatibility/
 config.py
 config_runtime/
 core/
 entrypoints/
 identity/
-mypy.ini
 providers/
-py.typed
-pyproject.toml
-pytest.ini
 runtime/
 services/
-setup.py
-tests/
 ui/
