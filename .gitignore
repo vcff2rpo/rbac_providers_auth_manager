@@ -1,0 +1,190 @@
+# Virtual environments
+.venv-win/
+.venv-wsl/
+.venv/
+venv/
+env/
+.python-version
+
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Tool caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.hypothesis/
+.dmypy.json
+.pyre/
+.pytype/
+.cache/
+
+# Coverage / test reports
+.coverage
+.coverage.*
+coverage.xml
+coverage/
+htmlcov/
+junit.xml
+pytest.xml
+*.lcov
+
+# Build / packaging
+build/
+dist/
+site/
+.build/
+.eggs/
+*.egg-info/
+pip-wheel-metadata/
+wheels/
+
+# Artifacts / generated outputs
+artifacts/
+reports/
+tmp/
+temp/
+*.tmp
+*.cache
+*.bak
+*.swp
+*.orig
+*.rej
+
+# Logs / runtime state
+*.log
+*.out
+*.err
+*.pid
+*.pid.lock
+logs/
+scripts/*.log
+scripts/*.tmp
+scripts/*.cache
+
+# Local databases / dumps
+*.sqlite
+*.sqlite3
+*.db
+*.dump
+airflow.db
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+!.env.sample
+*.env
+*.secret
+*.secrets
+secrets/
+secret/
+tokens/
+token/
+credentials/
+creds/
+
+# Keys / certificates / keystores
+*.pem
+*.key
+*.crt
+*.cer
+*.p12
+*.pfx
+*.jks
+*.kdb
+*.kdbx
+*.asc
+*.gpg
+
+# SSH / auth material
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
+known_hosts
+*.ovpn
+
+# Cloud / kube / local auth files
+.aws/
+.azure/
+.gcloud/
+kubeconfig
+.kube/
+.terraform/
+*.tfstate
+*.tfstate.*
+
+# IDE / editor
+.vscode/
+.idea/
+*.code-workspace
+
+# direnv
+.direnv/
+.envrc
+
+# OS noise
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Type checker / notebook / misc
+.ipynb_checkpoints/
+
+# Local-only config overrides
+*.local
+local_*.py
+config.local.*
+settings.local.*
+*.override
+config.override.*
+settings.override.*
+
+# Project-specific local runtime/config files at repo root
+config_runtime/*.local
+config_runtime/*.override
+config_runtime/*.secrets
+config_runtime/*.token
+config_runtime/*.pem
+config_runtime/*.key
+config_runtime/*.crt
+config_runtime/*.cer
+config_runtime/*.p12
+config_runtime/*.pfx
+config_runtime/*.jks
+config_runtime/*.kdb
+config_runtime/*.kdbx
+config_runtime/*.gpg
+config_runtime/*.asc
+
+# Current plugin package local runtime/config files
+rbac_providers_auth_manager/config_runtime/*.local
+rbac_providers_auth_manager/config_runtime/*.override
+rbac_providers_auth_manager/config_runtime/*.secrets
+rbac_providers_auth_manager/config_runtime/*.token
+rbac_providers_auth_manager/config_runtime/*.pem
+rbac_providers_auth_manager/config_runtime/*.key
+rbac_providers_auth_manager/config_runtime/*.crt
+rbac_providers_auth_manager/config_runtime/*.cer
+rbac_providers_auth_manager/config_runtime/*.p12
+rbac_providers_auth_manager/config_runtime/*.pfx
+rbac_providers_auth_manager/config_runtime/*.jks
+rbac_providers_auth_manager/config_runtime/*.kdb
+rbac_providers_auth_manager/config_runtime/*.kdbx
+rbac_providers_auth_manager/config_runtime/*.gpg
+rbac_providers_auth_manager/config_runtime/*.asc
+
+!rbac_providers_auth_manager/config_runtime/permissions.ini
+
+# Local debug outputs
+tests/output/
+tests/tmp/
+.ci-artifacts/
+ci_review/
+*.sbom.json
+*.sbom.xml

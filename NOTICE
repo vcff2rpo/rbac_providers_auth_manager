@@ -1,0 +1,6 @@
+rbac_providers_auth_manager
+Copyright 2026 Contributors
+
+This distribution is licensed under the Apache License, Version 2.0.
+It bundles project-specific source code, CI workflows, and documentation for
+an Apache Airflow authentication and RBAC plugin validation project.
