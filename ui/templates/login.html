@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${page_title}</title>
+    <style>
+${auth_css}
+    </style>
+  </head>
+  <body>
+    <div class="panel">
+      <div class="panel-heading">
+        <span>${page_title}</span>
+        <span class="env-badge">${environment_label}</span>
+      </div>
+
+      <div class="panel-body">
+        <div class="help note">
+          <strong>Note:</strong> ${provider_note}
+        </div>
+
+        ${status_banner_html}
+
+        <div class="layout">
+          <div>
+            ${ldap_form_html}
+            ${divider_html}
+            ${entra_button_html}
+          </div>
+          <div>
+            ${help_panel_html}
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
