@@ -1,0 +1,50 @@
+name: CI self check
+on:
+  pull_request:
+    paths:
+    - .github/workflows/**
+    - ci/**
+    - tests/ci/**
+    - pyproject.toml
+    - pytest.ini
+    - mypy.ini
+    - docs/CI_OVERVIEW.md
+  push:
+    branches:
+    - main
+    - master
+    paths:
+    - .github/workflows/**
+    - ci/**
+    - tests/ci/**
+    - pyproject.toml
+    - pytest.ini
+    - mypy.ini
+    - docs/CI_OVERVIEW.md
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+jobs:
+  resolve_ci_context:
+    runs-on: ubuntu-latest
+    outputs:
+      python_primary: ${{ steps.context.outputs.python_primary }}
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+    - uses: ./ci/actions/bootstrap-python
+      with:
+        python-version: '3.13'
+    - id: context
+      uses: ./ci/actions/export-ci-context
+  ci_self_check:
+    needs: resolve_ci_context
+    uses: ./.github/workflows/reusable_ci_self_check.yml
+    with:
+      python-version: ${{ needs.resolve_ci_context.outputs.python_primary }}

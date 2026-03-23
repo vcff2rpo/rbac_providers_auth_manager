@@ -1,0 +1,18 @@
+name: render CI ownership
+description: Render the committed machine-readable CI ownership artifact
+inputs:
+  repo-root:
+    description: Repository root
+    required: false
+    default: .
+  output-json:
+    description: Output JSON path
+    required: true
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        set -euo pipefail
+        python "${{ inputs.repo-root }}/ci/scripts/render_ci_ownership.py" \
+          --output-json "${{ inputs.output-json }}"

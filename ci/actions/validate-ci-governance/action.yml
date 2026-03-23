@@ -1,0 +1,84 @@
+name: validate CI governance
+description: Validate CI registries, committed artifacts, YAML, and CI self-check tests
+inputs:
+  repo-root:
+    description: Repository root
+    required: false
+    default: .
+  rendered-reference-md:
+    description: Rendered CI reference markdown path
+    required: true
+  rendered-reference-json:
+    description: Rendered CI reference json path
+    required: true
+  rendered-ownership-json:
+    description: Rendered CI ownership json path
+    required: true
+  rendered-workflow-inputs-md:
+    description: Rendered CI workflow inputs markdown path
+    required: true
+  rendered-workflow-inputs-json:
+    description: Rendered CI workflow inputs json path
+    required: true
+  rendered-project-overview-md:
+    description: Rendered maintainer-facing project CI overview markdown path
+    required: true
+  pytest-targets:
+    description: CI self-check pytest targets
+    required: false
+    default: >-
+      tests/ci/test_ci_lane_policy.py
+      tests/ci/test_ci_catalog_registry.py
+      tests/ci/test_ci_versions_registry.py
+      tests/ci/test_ci_path_filters_registry.py
+      tests/ci/test_render_final_ci_summary.py
+      tests/ci/test_ci_reference_sync.py
+      tests/ci/test_ci_ownership_sync.py
+      tests/ci/test_ci_workflow_inputs_sync.py
+      tests/ci/test_project_ci_overview_sync.py
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        set -euo pipefail
+        cd "${{ inputs.repo-root }}"
+        python -m py_compile \
+          ci/scripts/ci_catalog_registry.py \
+          ci/scripts/ci_lane_policy.py \
+          ci/scripts/ci_summary_catalog.py \
+          ci/scripts/ci_versions.py \
+          ci/scripts/ci_path_filters.py \
+          ci/scripts/render_ci_inventory.py \
+          ci/scripts/render_ci_reference.py \
+          ci/scripts/render_ci_ownership.py \
+          ci/scripts/render_ci_scope_summary.py \
+          ci/scripts/render_final_ci_summary.py \
+          ci/scripts/render_project_ci_overview.py
+    - shell: bash
+      run: |
+        set -euo pipefail
+        cd "${{ inputs.repo-root }}"
+        python - <<'PY'
+        from pathlib import Path
+        import yaml
+
+        for root in (Path('.github/workflows'), Path('ci/actions')):
+            for path in sorted(root.rglob('*.yml')):
+                yaml.safe_load(path.read_text(encoding='utf-8'))
+        PY
+    - shell: bash
+      run: |
+        set -euo pipefail
+        cd "${{ inputs.repo-root }}"
+        cmp -s ci/CI_REFERENCE.md "${{ inputs.rendered-reference-md }}"
+        cmp -s ci/CI_REFERENCE.json "${{ inputs.rendered-reference-json }}"
+        cmp -s ci/CI_OWNERSHIP.json "${{ inputs.rendered-ownership-json }}"
+        cmp -s ci/CI_WORKFLOW_INPUTS.md "${{ inputs.rendered-workflow-inputs-md }}"
+        cmp -s ci/CI_WORKFLOW_INPUTS.json "${{ inputs.rendered-workflow-inputs-json }}"
+        cmp -s docs/CI_OVERVIEW.md "${{ inputs.rendered-project-overview-md }}"
+    - shell: bash
+      run: |
+        set -euo pipefail
+        cd "${{ inputs.repo-root }}"
+        pytest -q ${{ inputs.pytest-targets }}

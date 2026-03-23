@@ -1,0 +1,139 @@
+name: reusable external real validation
+on:
+  workflow_call:
+    inputs:
+      package-name:
+        description: Python package name
+        required: false
+        type: string
+        default: rbac_providers_auth_manager
+      airflow-version:
+        description: Airflow version to install for DB-backed validation
+        required: false
+        type: string
+        default: 3.1.8
+      fab-provider-version:
+        description: FAB provider version for DB-backed validation
+        required: false
+        type: string
+        default: 3.5.0
+      python-version:
+        description: Python version for external validation
+        required: false
+        type: string
+        default: '3.13'
+      require-external-secrets:
+        description: Fail instead of skip when external LDAP/Entra secrets are missing
+        required: false
+        type: boolean
+        default: false
+permissions:
+  contents: read
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+jobs:
+  external-real-validation:
+    name: external real validation (Python ${{ inputs.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PACKAGE_NAME: ${{ inputs['package-name'] }}
+      AIRFLOW_VERSION: ${{ inputs['airflow-version'] }}
+      FAB_PROVIDER_VERSION: ${{ inputs['fab-provider-version'] }}
+      PYTHONPATH: ${{ github.workspace }}/..
+      EXTERNAL_ARTIFACT_DIR: .ci-artifacts/external-real
+      REQUIRE_EXTERNAL_SECRETS: ${{ inputs['require-external-secrets'] }}
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+    - uses: ./ci/actions/bootstrap-python
+      with:
+        python-version: ${{ inputs.python-version }}
+        cache-dependency-path: 'ci/requirements/requirements-external-real-validation.txt
+
+          tests/ci/*.py
+
+          '
+    - name: Upgrade packaging tools
+      run: python -m pip install --upgrade pip setuptools wheel
+    - uses: ./ci/actions/install-ldap-build-deps
+    - uses: ./ci/actions/resolve-airflow-constraints
+      with:
+        airflow-version: ${{ inputs.airflow-version }}
+        python-version: ${{ inputs.python-version }}
+    - name: Install Airflow core and FAB provider with constraints
+      run: 'python -m pip install "apache-airflow==${AIRFLOW_VERSION}" --constraint "${AIRFLOW_CONSTRAINTS_URL}"
+
+        python -m pip install "apache-airflow-providers-fab==${FAB_PROVIDER_VERSION}" --constraint "${AIRFLOW_CONSTRAINTS_URL}"
+
+        python -m pip install -r ci/requirements/requirements-external-real-validation.txt
+
+        '
+    - name: Initialize Airflow runtime paths
+      run: 'echo "AIRFLOW_HOME=${RUNNER_TEMP}/airflow-home" >> "$GITHUB_ENV"
+
+        echo "AIRFLOW_CONFIG=${RUNNER_TEMP}/airflow-home/airflow.cfg" >> "$GITHUB_ENV"
+
+        echo "AIRFLOW_DATA_DIR=${RUNNER_TEMP}/airflow-home/data" >> "$GITHUB_ENV"
+
+        echo "AIRFLOW_PLUGINS_DIR=${RUNNER_TEMP}/airflow-home/plugins" >> "$GITHUB_ENV"
+
+        echo "AIRFLOW_DAGS_DIR=${RUNNER_TEMP}/airflow-home/dags" >> "$GITHUB_ENV"
+
+        echo "AIRFLOW_DB_PATH=${RUNNER_TEMP}/airflow-home/airflow.db" >> "$GITHUB_ENV"
+
+        echo "AIRFLOW_PLUGIN_ZIP=${RUNNER_TEMP}/airflow-home/plugins/rbac_providers_auth_manager.zip" >> "$GITHUB_ENV"
+
+        echo "AIRFLOW_PERMISSIONS_INI=${RUNNER_TEMP}/airflow-home/plugins/rbac_providers_auth_manager_permissions.ini" >> "$GITHUB_ENV"
+
+        '
+    - name: Bootstrap runtime and write CI config
+      run: 'set -euo pipefail
+
+        mkdir -p "$AIRFLOW_HOME" "$AIRFLOW_DATA_DIR" "$AIRFLOW_PLUGINS_DIR" "$AIRFLOW_DAGS_DIR" "$EXTERNAL_ARTIFACT_DIR"
+
+        python ci/scripts/bootstrap_airflow_runtime.py 2>&1 | tee "$EXTERNAL_ARTIFACT_DIR/bootstrap-runtime.log"
+
+        echo "PYTHONPATH=${AIRFLOW_PLUGIN_ZIP}" >> "$GITHUB_ENV"
+
+        python ci/scripts/write_airflow_ci_config.py 2>&1 | tee "$EXTERNAL_ARTIFACT_DIR/write-airflow-config.log"
+
+        python ci/scripts/create_hello_world_dag.py 2>&1 | tee "$EXTERNAL_ARTIFACT_DIR/create-hello-dag.log"
+
+        '
+    - name: Bootstrap Airflow DB and initialize auth manager
+      run: "set -euo pipefail\npython -m airflow db migrate 2>&1 | tee \"$EXTERNAL_ARTIFACT_DIR/airflow-db-migrate.log\"\nAIRFLOW__LOGGING__LOGGING_LEVEL=INFO python -m airflow api-server >\"$EXTERNAL_ARTIFACT_DIR/api-server.log\" 2>&1 &\nAPI_PID=$!\necho \"$API_PID\" > \"$EXTERNAL_ARTIFACT_DIR/api-server.pid\"\nfor i in $(seq 1 40); do\n  if curl -fsS \"http://127.0.0.1:8080/api/v2/monitor/health\" >\"$EXTERNAL_ARTIFACT_DIR/health.json\"; then\n    break\n  fi\n  sleep 2\ndone\ncurl -fsS \"http://127.0.0.1:8080/auth/login/\" > \"$EXTERNAL_ARTIFACT_DIR/auth-login.html\" || true\ntail -n 120 \"$EXTERNAL_ARTIFACT_DIR/api-server.log\" || true\n"
+    - name: Run DB-backed and external identity validation tests
+      run: 'set -o pipefail
+
+        python -m pytest -vv -rA -s --showlocals --durations=20 --log-cli-level=INFO             --maxfail=1             --disable-warnings             --junitxml="$EXTERNAL_ARTIFACT_DIR/pytest-external-real.xml"             $(python ci/scripts/list_contract_tests.py --suite external_real_validation) 2>&1 | tee "$EXTERNAL_ARTIFACT_DIR/pytest-external-real.log"
+
+        '
+    - uses: ./ci/actions/render-ci-scope-summary
+      if: always()
+      with:
+        title: external real validation scope
+        suite: external_real_validation
+        output: $EXTERNAL_ARTIFACT_DIR/external-real-scope.md
+    - name: Build external validation artifact summary
+      if: always()
+      uses: ./ci/actions/summarize-ci-artifacts
+      with:
+        artifact-dir: ${{ env.EXTERNAL_ARTIFACT_DIR }}
+        lane-name: external real validation
+        output-md: ${{ env.EXTERNAL_ARTIFACT_DIR }}/artifact-summary.md
+    - name: Stop API server
+      if: always()
+      run: "if [ -f \"$EXTERNAL_ARTIFACT_DIR/api-server.pid\" ]; then\n  API_PID=\"$(cat \"$EXTERNAL_ARTIFACT_DIR/api-server.pid\")\"\n  kill \"$API_PID\" >/dev/null 2>&1 || true\n  wait \"$API_PID\" >/dev/null 2>&1 || true\nfi\n"
+    - name: Upload external validation artifacts
+      if: always()
+      uses: ./ci/actions/upload-artifact-bundle
+      with:
+        name: external-real-validation-py${{ inputs.python-version }}
+        path: '${{ env.EXTERNAL_ARTIFACT_DIR }}
+
+          ${{ env.EXTERNAL_ARTIFACT_DIR }}/external-real-scope.md
+
+          '

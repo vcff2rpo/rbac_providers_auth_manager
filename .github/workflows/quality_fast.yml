@@ -1,0 +1,79 @@
+name: quality fast
+on:
+  pull_request:
+    paths:
+    - __init__.py
+    - api/**
+    - auth_manager.py
+    - authorization/**
+    - compatibility/**
+    - config.py
+    - config_runtime/**
+    - core/**
+    - entrypoints/**
+    - identity/**
+    - providers/**
+    - runtime/**
+    - services/**
+    - ui/**
+    - tests/**
+    - .github/workflows/reusable_quality.yml
+    - .github/workflows/quality_fast.yml
+    - ci/**
+    - pyproject.toml
+    - pytest.ini
+    - mypy.ini
+  push:
+    branches:
+    - main
+    - master
+    paths:
+    - __init__.py
+    - api/**
+    - auth_manager.py
+    - authorization/**
+    - compatibility/**
+    - config.py
+    - config_runtime/**
+    - core/**
+    - entrypoints/**
+    - identity/**
+    - providers/**
+    - runtime/**
+    - services/**
+    - ui/**
+    - tests/**
+    - .github/workflows/reusable_quality.yml
+    - .github/workflows/quality_fast.yml
+    - ci/**
+    - pyproject.toml
+    - pytest.ini
+    - mypy.ini
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+jobs:
+  resolve_ci_context:
+    runs-on: ubuntu-latest
+    outputs:
+      python_primary: ${{ steps.context.outputs.python_primary }}
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+    - uses: ./ci/actions/bootstrap-python
+      with:
+        python-version: '3.13'
+    - id: context
+      uses: ./ci/actions/export-ci-context
+  quality:
+    needs: resolve_ci_context
+    uses: ./.github/workflows/reusable_quality.yml
+    with:
+      package-name: rbac_providers_auth_manager
+      python-version: ${{ needs.resolve_ci_context.outputs.python_primary }}

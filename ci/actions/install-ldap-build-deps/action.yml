@@ -1,0 +1,18 @@
+name: install LDAP build dependencies
+description: Install OS and Python build prerequisites for python-ldap based CI lanes.
+inputs:
+  extra-apt-packages:
+    description: Optional extra apt packages to install after the LDAP build prerequisites.
+    required: false
+    default: ''
+runs:
+  using: composite
+  steps:
+    - name: Install python-ldap build prerequisites
+      shell: bash
+      run: |
+        set -euo pipefail
+        bash ci/bash/install_python_ldap_build_deps.sh
+        if [ -n "${{ inputs.extra-apt-packages }}" ]; then
+          sudo apt-get install -y ${{ inputs.extra-apt-packages }}
+        fi

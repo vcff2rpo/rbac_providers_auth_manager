@@ -1,0 +1,141 @@
+name: reusable open pr
+
+on:
+  workflow_call:
+    inputs:
+      source_branch: {type: string, required: false, default: feature-branch}
+      base_branch: {type: string, required: false, default: main}
+      review_branch_prefix: {type: string, required: false, default: ready/feature-branch}
+      core_only_manifest: {type: string, required: false, default: 'ci/config/core_promotion_allowlist.txt'}
+      pr_title: {type: string, required: false, default: 'Review: feature-branch ready for main'}
+      ci_self_check_result: {type: string, required: false, default: success}
+      quality_result: {type: string, required: false, default: unknown}
+      deep_validation_result: {type: string, required: false, default: unknown}
+      airflow_result: {type: string, required: false, default: unknown}
+      idp_result: {type: string, required: false, default: unknown}
+      fab_provider_result: {type: string, required: false, default: unknown}
+      nightly_compatibility_result: {type: string, required: false, default: unknown}
+      external_real_validation_result: {type: string, required: false, default: unknown}
+      license_compliance_result: {type: string, required: false, default: unknown}
+      run_url: {type: string, required: false, default: ''}
+      source_sha: {type: string, required: false, default: ''}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  open_review_pr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.source_branch }}
+          fetch-depth: 0
+      - id: resolve_base
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const requestedBase = `${{ inputs.base_branch }}`.trim();
+            const { data: repoData } = await github.rest.repos.get({ owner, repo });
+            const defaultBranch = repoData.default_branch;
+            async function branchExists(branch) {
+              try { await github.rest.repos.getBranch({ owner, repo, branch }); return true; }
+              catch (error) { if (error.status === 404) return false; throw error; }
+            }
+            let effectiveBase = requestedBase || defaultBranch;
+            let resolution = requestedBase ? 'requested' : 'default';
+            if (!(await branchExists(effectiveBase))) { effectiveBase = defaultBranch; resolution = requestedBase ? 'default-fallback' : 'default'; }
+            core.setOutput('requested_base', requestedBase);
+            core.setOutput('default_base', defaultBranch);
+            core.setOutput('effective_base', effectiveBase);
+            core.setOutput('resolution', resolution);
+      - id: review_branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          SOURCE_SHA="${{ inputs.source_sha }}"
+          if [ -z "$SOURCE_SHA" ]; then SOURCE_SHA="$(git rev-parse HEAD)"; fi
+          SHORT_SHA="$(git rev-parse --short=12 "$SOURCE_SHA")"
+          REVIEW_BRANCH="${{ inputs.review_branch_prefix }}-${SHORT_SHA}-${GITHUB_RUN_ID}"
+          BASE_BRANCH="${{ steps.resolve_base.outputs.effective_base }}"
+          MANIFEST_PATH="${{ inputs.core_only_manifest }}"
+          if [ ! -f "$MANIFEST_PATH" ]; then
+            echo "Core promotion manifest not found: $MANIFEST_PATH" >&2
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch --no-tags --prune origin             "+refs/heads/${{ inputs.source_branch }}:refs/remotes/origin/${{ inputs.source_branch }}"             "+refs/heads/${BASE_BRANCH}:refs/remotes/origin/${BASE_BRANCH}"
+          rm -rf .git/promote-source .git/promote-base .git/promote-stage
+          mkdir -p .git/promote-source .git/promote-base .git/promote-stage
+          git archive "$SOURCE_SHA" | tar -x -C .git/promote-source
+          git archive "origin/${BASE_BRANCH}" | tar -x -C .git/promote-base
+          cp -a .git/promote-base/. .git/promote-stage/
+          while IFS= read -r raw_entry || [ -n "$raw_entry" ]; do
+            entry="${raw_entry%%#*}"
+            entry="${entry%$'\r'}"
+            entry="$(printf '%s' "$entry" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+            [ -n "$entry" ] || continue
+            rm -rf ".git/promote-stage/$entry"
+            if [ -e ".git/promote-source/$entry" ]; then
+              mkdir -p "$(dirname ".git/promote-stage/$entry")"
+              cp -a ".git/promote-source/$entry" ".git/promote-stage/$entry"
+            fi
+          done < "$MANIFEST_PATH"
+          find .git/promote-stage -mindepth 1 -maxdepth 1 ! -name '.gitkeep' -exec true {} + >/dev/null 2>&1 || true
+          git checkout --detach "origin/${BASE_BRANCH}"
+          git checkout -B "$REVIEW_BRANCH" "origin/${BASE_BRANCH}"
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp -a .git/promote-stage/. .
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No core-only changes detected relative to ${BASE_BRANCH}; reusing base branch tree."
+          else
+            git commit -m "Promote validated core plugin from ${{ inputs.source_branch }}"
+          fi
+          git push --force-with-lease origin "HEAD:refs/heads/$REVIEW_BRANCH"
+          echo "review_branch=$REVIEW_BRANCH" >> "$GITHUB_OUTPUT"
+          echo "source_sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
+      - uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const head = '${{ steps.review_branch.outputs.review_branch }}';
+            const base = '${{ steps.resolve_base.outputs.effective_base }}';
+            const title = '${{ inputs.pr_title }}';
+            const sourceSha = '${{ steps.review_branch.outputs.source_sha }}';
+            const existing = await github.paginate(github.rest.pulls.list, { owner, repo, state: 'open', head: `${owner}:${head}`, base, per_page: 100 });
+            const body = [
+              `Automated PR created from \`${{ inputs.source_branch }}\` after all enabled CI gates completed successfully.`,
+              '',
+              `Generated promotion branch: \`${head}\``,
+              `Source SHA: \`${sourceSha}\``,
+              `Target branch: \`${base}\``,
+              `Promotion mode: core-only allowlist from \`${{ inputs.core_only_manifest }}\``,
+              `Workflow run: ${{ inputs.run_url }}`,
+              '',
+              'CI result summary:',
+              `- ci-self-check: ${{ inputs.ci_self_check_result || 'success' }}`,
+              `- quality: ${{ inputs.quality_result }}`,
+              `- deep-validation: ${{ inputs.deep_validation_result }}`,
+              `- airflow-integration: ${{ inputs.airflow_result }}`,
+              `- identity-provider-integration: ${{ inputs.idp_result }}`,
+              `- fab-provider-validation: ${{ inputs.fab_provider_result }}`,
+              `- nightly-compatibility: ${{ inputs.nightly_compatibility_result }}`,
+              `- external-real-validation: ${{ inputs.external_real_validation_result }}`,
+              `- license-compliance: ${{ inputs.license_compliance_result }}`,
+            ].join('\n');
+            if (existing.length > 0) {
+              await github.rest.pulls.update({ owner, repo, pull_number: existing[0].number, title, body, base });
+              return;
+            }
+            await github.rest.pulls.create({ owner, repo, title, head, base, body, maintainer_can_modify: true });

@@ -1,0 +1,23 @@
+name: resolve Airflow constraints URL
+description: Compute the official Apache Airflow constraints URL for a Python/Airflow version pair.
+inputs:
+  airflow-version:
+    description: Apache Airflow version.
+    required: true
+  python-version:
+    description: Python version.
+    required: true
+outputs:
+  constraints-url:
+    description: Resolved constraints URL.
+    value: ${{ steps.resolve.outputs.constraints-url }}
+runs:
+  using: composite
+  steps:
+    - id: resolve
+      shell: bash
+      run: |
+        set -euo pipefail
+        CONSTRAINTS_URL="https://raw.githubusercontent.com/apache/airflow/constraints-${{ inputs.airflow-version }}/constraints-${{ inputs.python-version }}.txt"
+        echo "constraints-url=$CONSTRAINTS_URL" >> "$GITHUB_OUTPUT"
+        echo "AIRFLOW_CONSTRAINTS_URL=$CONSTRAINTS_URL" >> "$GITHUB_ENV"

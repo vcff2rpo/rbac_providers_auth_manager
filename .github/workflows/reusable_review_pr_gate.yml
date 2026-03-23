@@ -1,0 +1,169 @@
+name: reusable review PR gate
+
+on:
+  workflow_call:
+    inputs:
+      create-review-pr:
+        required: false
+        type: boolean
+        default: true
+      source-branch:
+        required: false
+        type: string
+        default: feature-branch
+      base-branch:
+        required: false
+        type: string
+        default: main
+      review-branch-prefix:
+        required: false
+        type: string
+        default: ready/core
+      pr-title:
+        required: false
+        type: string
+        default: "Promotion: core-only plugin ready for main"
+      ci_self_check-enabled:
+        required: false
+        type: boolean
+        default: true
+      ci_self_check-result:
+        required: false
+        type: string
+        default: unknown
+      quality-result:
+        required: false
+        type: string
+        default: unknown
+      deep-validation-enabled:
+        required: false
+        type: boolean
+        default: false
+      deep-validation-result:
+        required: false
+        type: string
+        default: skipped
+      airflow-enabled:
+        required: false
+        type: boolean
+        default: false
+      airflow-result:
+        required: false
+        type: string
+        default: skipped
+      airflow-suite-result:
+        required: false
+        type: string
+        default: skipped
+      idp-enabled:
+        required: false
+        type: boolean
+        default: false
+      idp-result:
+        required: false
+        type: string
+        default: skipped
+      fab-provider-enabled:
+        required: false
+        type: boolean
+        default: false
+      fab-provider-result:
+        required: false
+        type: string
+        default: skipped
+      fab-provider-suite-result:
+        required: false
+        type: string
+        default: skipped
+      nightly-compatibility-enabled:
+        required: false
+        type: boolean
+        default: false
+      nightly-compatibility-result:
+        required: false
+        type: string
+        default: skipped
+      external-real-validation-enabled:
+        required: false
+        type: boolean
+        default: false
+      external-real-validation-result:
+        required: false
+        type: string
+        default: skipped
+      license-compliance-enabled:
+        required: false
+        type: boolean
+        default: false
+      license-compliance-result:
+        required: false
+        type: string
+        default: skipped
+      run-url:
+        required: false
+        type: string
+        default: ""
+      source-sha:
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      should_open_pr: ${{ steps.evaluate.outputs.should_open_pr }}
+      gate_reason: ${{ steps.evaluate.outputs.gate_reason }}
+    steps:
+      - id: evaluate
+        shell: bash
+        run: |
+          set -euo pipefail
+          SHOULD_OPEN_PR=true
+          REASONS=()
+
+          [ "${{ inputs.create-review-pr }}" = "true" ] || { SHOULD_OPEN_PR=false; REASONS+=("create_review_pr=false"); }
+          if [ "${{ inputs.ci_self_check-enabled }}" = "true" ] && [ "${{ inputs.ci_self_check-result }}" != "success" ]; then SHOULD_OPEN_PR=false; REASONS+=("ci_self_check=${{ inputs.ci_self_check-result }}"); fi
+          [ "${{ inputs.quality-result }}" = "success" ] || { SHOULD_OPEN_PR=false; REASONS+=("quality=${{ inputs.quality-result }}"); }
+          if [ "${{ inputs.deep-validation-enabled }}" = "true" ] && [ "${{ inputs.deep-validation-result }}" != "success" ]; then SHOULD_OPEN_PR=false; REASONS+=("deep_validation=${{ inputs.deep-validation-result }}"); fi
+          if [ "${{ inputs.airflow-enabled }}" = "true" ] && [ "${{ inputs.airflow-suite-result }}" != "success" ]; then SHOULD_OPEN_PR=false; REASONS+=("airflow_suite=${{ inputs.airflow-suite-result }}"); fi
+          if [ "${{ inputs.idp-enabled }}" = "true" ] && [ "${{ inputs.idp-result }}" != "success" ]; then SHOULD_OPEN_PR=false; REASONS+=("idp=${{ inputs.idp-result }}"); fi
+          if [ "${{ inputs.fab-provider-enabled }}" = "true" ] && [ "${{ inputs.fab-provider-suite-result }}" != "success" ]; then SHOULD_OPEN_PR=false; REASONS+=("fab_provider=${{ inputs.fab-provider-result }}"); fi
+          if [ "${{ inputs.nightly-compatibility-enabled }}" = "true" ] && [ "${{ inputs.nightly-compatibility-result }}" != "success" ]; then SHOULD_OPEN_PR=false; REASONS+=("nightly_compatibility=${{ inputs.nightly-compatibility-result }}"); fi
+          if [ "${{ inputs.external-real-validation-enabled }}" = "true" ] && [ "${{ inputs.external-real-validation-result }}" != "success" ]; then SHOULD_OPEN_PR=false; REASONS+=("external_real_validation=${{ inputs.external-real-validation-result }}"); fi
+          if [ "${{ inputs.license-compliance-enabled }}" = "true" ] && [ "${{ inputs.license-compliance-result }}" != "success" ]; then SHOULD_OPEN_PR=false; REASONS+=("license_compliance=${{ inputs.license-compliance-result }}"); fi
+
+          if [ "$SHOULD_OPEN_PR" = true ]; then GATE_REASON=all_enabled_gates_passed; else GATE_REASON="$(IFS=';'; echo "${REASONS[*]}")"; fi
+          echo "should_open_pr=$SHOULD_OPEN_PR" >> "$GITHUB_OUTPUT"
+          echo "gate_reason=$GATE_REASON" >> "$GITHUB_OUTPUT"
+
+  open_review_pr:
+    needs: gate
+    if: ${{ needs.gate.outputs.should_open_pr == 'true' }}
+    permissions:
+      contents: write
+      pull-requests: write
+    secrets: inherit
+    uses: ./.github/workflows/reusable_open_pr.yml
+    with:
+      source_branch: ${{ inputs.source-branch }}
+      base_branch: ${{ inputs.base-branch }}
+      review_branch_prefix: ${{ inputs.review-branch-prefix }}
+      pr_title: ${{ inputs.pr-title }}
+      ci_self_check_result: ${{ inputs.ci_self_check-enabled && inputs.ci_self_check-result || 'skipped' }}
+      quality_result: ${{ inputs.quality-result }}
+      deep_validation_result: ${{ inputs.deep-validation-enabled && inputs.deep-validation-result || 'skipped' }}
+      airflow_result: ${{ inputs.airflow-enabled && inputs.airflow-result || 'skipped' }}
+      idp_result: ${{ inputs.idp-enabled && inputs.idp-result || 'skipped' }}
+      fab_provider_result: ${{ inputs.fab-provider-enabled && inputs.fab-provider-result || 'skipped' }}
+      nightly_compatibility_result: ${{ inputs.nightly-compatibility-enabled && inputs.nightly-compatibility-result || 'skipped' }}
+      external_real_validation_result: ${{ inputs.external-real-validation-enabled && inputs.external-real-validation-result || 'skipped' }}
+      license_compliance_result: ${{ inputs.license-compliance-enabled && inputs.license-compliance-result || 'skipped' }}
+      run_url: ${{ inputs.run-url }}
+      source_sha: ${{ inputs.source-sha }}

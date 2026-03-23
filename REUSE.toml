@@ -1,0 +1,41 @@
+version = 1
+
+[[annotations]]
+path = [
+  "*.py",
+  "**/*.py",
+  "*.md",
+  "**/*.md",
+  "*.txt",
+  "**/*.txt",
+  "*.ini",
+  "**/*.ini",
+  "*.cfg",
+  "**/*.cfg",
+  "*.toml",
+  "**/*.toml",
+  "*.yaml",
+  "**/*.yaml",
+  "*.yml",
+  "**/*.yml",
+  "*.json",
+  "**/*.json",
+  "*.html",
+  "**/*.html",
+  "*.css",
+  "**/*.css",
+  "*.sh",
+  "**/*.sh",
+  ".editorconfig",
+  ".gitattributes",
+  ".gitignore",
+  ".gitleaks.toml",
+  "py.typed",
+  "pytest.ini",
+  "mypy.ini",
+  "LICENSE",
+  "NOTICE"
+]
+precedence = "override"
+SPDX-FileCopyrightText = "2026 Contributors to rbac_providers_auth_manager"
+SPDX-License-Identifier = "Apache-2.0"

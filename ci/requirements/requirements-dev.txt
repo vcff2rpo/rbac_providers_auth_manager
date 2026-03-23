@@ -1,0 +1,13 @@
+ruff==0.13.0
+mypy==1.17.1
+pytest==8.4.2
+pytest-cov==6.2.1
+coverage==7.10.6
+pip-audit==2.9.0
+redis==6.4.0
+fastapi==0.135.1
+httpx==0.28.1
+python-multipart==0.0.22
+defusedxml==0.7.1
+PyYAML==6.0.2
+types-PyYAML==6.0.12.20250915

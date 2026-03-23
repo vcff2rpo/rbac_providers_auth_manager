@@ -1,0 +1,53 @@
+name: export CI context
+description: Export registry-backed CI version and requirement context to workflow outputs.
+inputs:
+  repo-root:
+    description: Repository root for context resolution.
+    required: false
+    default: '.'
+outputs:
+  python_primary:
+    description: Primary Python version.
+    value: ${{ steps.context.outputs.python_primary }}
+  python_secondary:
+    description: Secondary Python version.
+    value: ${{ steps.context.outputs.python_secondary }}
+  python_deep_validation:
+    description: Deep validation Python matrix JSON.
+    value: ${{ steps.context.outputs.python_deep_validation }}
+  python_nightly:
+    description: Nightly Python matrix JSON.
+    value: ${{ steps.context.outputs.python_nightly }}
+  airflow_default:
+    description: Default Airflow version.
+    value: ${{ steps.context.outputs.airflow_default }}
+  airflow_nightly:
+    description: Nightly Airflow matrix JSON.
+    value: ${{ steps.context.outputs.airflow_nightly }}
+  fab_provider_default:
+    description: Default FAB provider version.
+    value: ${{ steps.context.outputs.fab_provider_default }}
+  fab_provider_nightly:
+    description: Nightly FAB provider matrix JSON.
+    value: ${{ steps.context.outputs.fab_provider_nightly }}
+  requirements_dev:
+    description: Dev requirements path.
+    value: ${{ steps.context.outputs.requirements_dev }}
+  requirements_airflow_integration:
+    description: Airflow integration requirements path.
+    value: ${{ steps.context.outputs.requirements_airflow_integration }}
+  requirements_external_real_validation:
+    description: External validation requirements path.
+    value: ${{ steps.context.outputs.requirements_external_real_validation }}
+  requirements_fab_provider_validation:
+    description: FAB provider validation requirements path.
+    value: ${{ steps.context.outputs.requirements_fab_provider_validation }}
+runs:
+  using: composite
+  steps:
+    - id: context
+      shell: bash
+      run: |
+        set -euo pipefail
+        cd "${{ inputs.repo-root }}"
+        python ci/scripts/ci_versions.py --github-output "$GITHUB_OUTPUT"

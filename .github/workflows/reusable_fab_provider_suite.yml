@@ -1,0 +1,88 @@
+name: reusable FAB provider validation suite
+
+on:
+  workflow_call:
+    inputs:
+      package-name:
+        description: Python package name
+        required: false
+        type: string
+        default: rbac_providers_auth_manager
+      airflow-version:
+        description: Airflow version to install for provider mirror validation
+        required: false
+        type: string
+        default: "3.1.8"
+      fab-provider-version:
+        description: apache-airflow-providers-fab version to validate against
+        required: false
+        type: string
+        default: "3.5.0"
+      py312-version:
+        description: Python version for first FAB provider validation lane
+        required: false
+        type: string
+        default: "3.12"
+      py313-version:
+        description: Python version for second FAB provider validation lane
+        required: false
+        type: string
+        default: "3.13"
+    outputs:
+      result_summary:
+        description: Summary of the FAB provider validation lane results
+        value: ${{ jobs.summary.outputs.result_summary }}
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  fab_provider_validation_py312:
+    uses: ./.github/workflows/reusable_fab_provider_validation.yml
+    with:
+      package-name: ${{ inputs.package-name }}
+      airflow-version: ${{ inputs.airflow-version }}
+      fab-provider-version: ${{ inputs.fab-provider-version }}
+      python-version: ${{ inputs.py312-version }}
+
+  fab_provider_validation_py313:
+    uses: ./.github/workflows/reusable_fab_provider_validation.yml
+    with:
+      package-name: ${{ inputs.package-name }}
+      airflow-version: ${{ inputs.airflow-version }}
+      fab-provider-version: ${{ inputs.fab-provider-version }}
+      python-version: ${{ inputs.py313-version }}
+
+  summary:
+    name: FAB provider validation suite summary
+    if: ${{ always() }}
+    needs:
+      - fab_provider_validation_py312
+      - fab_provider_validation_py313
+    runs-on: ubuntu-latest
+    outputs:
+      result_summary: ${{ steps.collect.outputs.result_summary }}
+    steps:
+      - id: collect
+        shell: bash
+        run: |
+          set -euo pipefail
+          RESULT_SUMMARY="py312=${{ needs.fab_provider_validation_py312.result }}, py313=${{ needs.fab_provider_validation_py313.result }}"
+          echo "result_summary=${RESULT_SUMMARY}" >> "$GITHUB_OUTPUT"
+          {
+            echo "# FAB provider validation suite"
+            echo
+            echo "| Job task | Executed | Result | What was validated |"
+            echo "|---|---|---|---|"
+            echo "| fab_provider_validation_py312 | [x] yes | ${{ needs.fab_provider_validation_py312.result }} | Installed official FAB provider snapshot versus plugin permission/resource mirror on Python 3.12 |"
+            echo "| fab_provider_validation_py313 | [x] yes | ${{ needs.fab_provider_validation_py313.result }} | Installed official FAB provider snapshot versus plugin permission/resource mirror on Python 3.13 |"
+            echo
+            echo "Overall suite result: ${RESULT_SUMMARY}"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ needs.fab_provider_validation_py312.result }}" != "success" ] || [ "${{ needs.fab_provider_validation_py313.result }}" != "success" ]; then
+            echo "At least one FAB provider validation lane failed."
+            exit 1
+          fi

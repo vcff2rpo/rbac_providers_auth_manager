@@ -1,0 +1,162 @@
+{
+  "lanes": [
+    {
+      "artifact_prefix": "ci-self-check",
+      "blocking": false,
+      "cadence": "per-change on CI-owned files",
+      "lane": "ci_self_check",
+      "path_filter_workflow": "ci_self_check",
+      "path_filtered": true,
+      "secrets_profile": "none",
+      "summary_group": "ci-infrastructure",
+      "workflow": "reusable_ci_self_check.yml"
+    },
+    {
+      "artifact_prefix": "quality",
+      "blocking": true,
+      "cadence": "per-change",
+      "lane": "quality",
+      "path_filter_workflow": null,
+      "path_filtered": false,
+      "secrets_profile": "none",
+      "summary_group": "core-quality",
+      "workflow": "reusable_quality.yml"
+    },
+    {
+      "artifact_prefix": "deep-validation",
+      "blocking": true,
+      "cadence": "per-change optional",
+      "lane": "deep_validation",
+      "path_filter_workflow": null,
+      "path_filtered": false,
+      "secrets_profile": "none",
+      "summary_group": "deep-validation",
+      "workflow": "reusable_deep_validation.yml"
+    },
+    {
+      "artifact_prefix": "airflow-integration",
+      "blocking": true,
+      "cadence": "per-change optional",
+      "lane": "airflow_integration",
+      "path_filter_workflow": null,
+      "path_filtered": false,
+      "secrets_profile": "none",
+      "summary_group": "integration",
+      "workflow": "reusable_airflow_integration.yml"
+    },
+    {
+      "artifact_prefix": "idp-integration",
+      "blocking": true,
+      "cadence": "per-change optional",
+      "lane": "identity_provider_integration",
+      "path_filter_workflow": null,
+      "path_filtered": false,
+      "secrets_profile": "test-services",
+      "summary_group": "integration",
+      "workflow": "reusable_identity_provider_integration.yml"
+    },
+    {
+      "artifact_prefix": "fab-provider-validation",
+      "blocking": true,
+      "cadence": "per-change optional",
+      "lane": "fab_provider_validation",
+      "path_filter_workflow": null,
+      "path_filtered": false,
+      "secrets_profile": "none",
+      "summary_group": "compatibility",
+      "workflow": "reusable_fab_provider_validation.yml"
+    },
+    {
+      "artifact_prefix": "nightly-compatibility",
+      "blocking": false,
+      "cadence": "nightly or manual",
+      "lane": "nightly_compatibility",
+      "path_filter_workflow": null,
+      "path_filtered": false,
+      "secrets_profile": "none",
+      "summary_group": "compatibility",
+      "workflow": "reusable_nightly_compatibility.yml"
+    },
+    {
+      "artifact_prefix": "external-real-validation",
+      "blocking": false,
+      "cadence": "manual opt-in",
+      "lane": "external_real_validation",
+      "path_filter_workflow": null,
+      "path_filtered": false,
+      "secrets_profile": "external-real",
+      "summary_group": "external-validation",
+      "workflow": "reusable_external_real_validation.yml"
+    },
+    {
+      "artifact_prefix": "license-compliance",
+      "blocking": true,
+      "cadence": "per-change optional",
+      "lane": "license_compliance",
+      "path_filter_workflow": null,
+      "path_filtered": false,
+      "secrets_profile": "none",
+      "summary_group": "release-readiness",
+      "workflow": "reusable_license_compliance.yml"
+    }
+  ],
+  "workflows": [
+    {
+      "lane": "ci_self_check",
+      "path_filter_events": [
+        "pull_request",
+        "push"
+      ],
+      "path_filter_workflow": "ci_self_check",
+      "workflow": "reusable_ci_self_check.yml"
+    },
+    {
+      "lane": "quality",
+      "path_filter_events": [],
+      "path_filter_workflow": null,
+      "workflow": "reusable_quality.yml"
+    },
+    {
+      "lane": "deep_validation",
+      "path_filter_events": [],
+      "path_filter_workflow": null,
+      "workflow": "reusable_deep_validation.yml"
+    },
+    {
+      "lane": "airflow_integration",
+      "path_filter_events": [],
+      "path_filter_workflow": null,
+      "workflow": "reusable_airflow_integration.yml"
+    },
+    {
+      "lane": "identity_provider_integration",
+      "path_filter_events": [],
+      "path_filter_workflow": null,
+      "workflow": "reusable_identity_provider_integration.yml"
+    },
+    {
+      "lane": "fab_provider_validation",
+      "path_filter_events": [],
+      "path_filter_workflow": null,
+      "workflow": "reusable_fab_provider_validation.yml"
+    },
+    {
+      "lane": "nightly_compatibility",
+      "path_filter_events": [],
+      "path_filter_workflow": null,
+      "workflow": "reusable_nightly_compatibility.yml"
+    },
+    {
+      "lane": "external_real_validation",
+      "path_filter_events": [],
+      "path_filter_workflow": null,
+      "workflow": "reusable_external_real_validation.yml"
+    },
+    {
+      "lane": "license_compliance",
+      "path_filter_events": [],
+      "path_filter_workflow": null,
+      "workflow": "reusable_license_compliance.yml"
+    }
+  ]
+}

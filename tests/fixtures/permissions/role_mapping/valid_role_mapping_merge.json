@@ -1,0 +1,14 @@
+{
+  "kind": "role_mapping",
+  "expect": "success",
+  "assertions": {
+    "cn=example_viewer,ou=groups,dc=example,dc=com": [
+      "Auditor",
+      "Viewer"
+    ],
+    "cn=example_operator,ou=groups,dc=example,dc=com": [
+      "Operator",
+      "Viewer"
+    ]
+  }
+}
