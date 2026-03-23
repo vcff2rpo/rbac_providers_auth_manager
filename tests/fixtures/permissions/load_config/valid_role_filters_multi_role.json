@@ -1,0 +1,11 @@
+{
+  "expect": "success",
+  "assertions": {
+    "role_filters.role_to_filters.ScopedFinance.dag_tags": ["finance"],
+    "role_filters.role_to_filters.ScopedFinance.environments": ["prod"],
+    "role_filters.role_to_filters.ScopedFinance.resource_prefixes": ["finance_"],
+    "role_filters.role_to_filters.ScopedOps.dag_tags": ["operations"],
+    "role_filters.role_to_filters.ScopedOps.environments": ["dr"],
+    "role_filters.role_to_filters.ScopedOps.resource_prefixes": ["ops_"]
+  }
+}

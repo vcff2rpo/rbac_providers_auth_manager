@@ -1,0 +1,46 @@
+name: render CI scope summary
+description: Render a suite, family, or group scope summary and append it to the job summary.
+inputs:
+  title:
+    description: Summary title.
+    required: true
+  output:
+    description: Output markdown path.
+    required: true
+  suite:
+    description: Optional suite selector.
+    required: false
+    default: ''
+  group:
+    description: Optional deep-validation group selector.
+    required: false
+    default: ''
+  family:
+    description: Optional coverage family selector.
+    required: false
+    default: ''
+  append-to-summary:
+    description: Whether to append the rendered markdown to GITHUB_STEP_SUMMARY.
+    required: false
+    default: 'true'
+runs:
+  using: composite
+  steps:
+    - name: Render scope summary markdown
+      shell: bash
+      run: |
+        set -euo pipefail
+        args=(--title "${{ inputs.title }}" --output "${{ inputs.output }}")
+        if [ -n "${{ inputs.suite }}" ]; then
+          args+=(--suite "${{ inputs.suite }}")
+        fi
+        if [ -n "${{ inputs.group }}" ]; then
+          args+=(--group "${{ inputs.group }}")
+        fi
+        if [ -n "${{ inputs.family }}" ]; then
+          args+=(--family "${{ inputs.family }}")
+        fi
+        python ci/scripts/render_ci_scope_summary.py "${args[@]}"
+        if [ "${{ inputs.append-to-summary }}" = "true" ]; then
+          cat "${{ inputs.output }}" >> "$GITHUB_STEP_SUMMARY"
+        fi

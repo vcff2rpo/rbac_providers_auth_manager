@@ -1,0 +1,403 @@
+name: reusable quality
+on:
+  workflow_call:
+    inputs:
+      package-name:
+        description: Python package name
+        required: false
+        type: string
+        default: rbac_providers_auth_manager
+      python-version:
+        description: Python version for the quality lane
+        required: false
+        type: string
+        default: '3.13'
+permissions:
+  contents: read
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+  PACKAGE_NAME: ${{ inputs['package-name'] }}
+  PYTHONPATH: ${{ github.workspace }}/..
+  QUALITY_ARTIFACT_DIR: .ci-artifacts/quality
+  PYTEST_VERBOSE_ARGS: -vv -rA -s --showlocals --durations=20 --log-cli-level=INFO
+jobs:
+  compile:
+    name: compile (Python ${{ inputs.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+      with: &id001
+        fetch-depth: 0
+    - uses: ./ci/actions/bootstrap-python
+      with:
+        python-version: ${{ inputs.python-version }}
+        cache-dependency-path: 'ci/requirements/requirements-dev.txt
+
+          ci/requirements/requirements-fab-provider-validation.txt
+
+          tests/ci/*.py
+
+          ci/scripts/*.py
+
+          '
+    - uses: ./ci/actions/install-python-deps
+      with:
+        requirements-files: 'ci/requirements/requirements-dev.txt
+
+          '
+    - run: python -m compileall -q .
+  pytest_collect:
+    name: pytest collect (Python ${{ inputs.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+      with: *id001
+    - uses: ./ci/actions/bootstrap-python
+      with:
+        python-version: ${{ inputs.python-version }}
+        cache-dependency-path: 'ci/requirements/requirements-dev.txt
+
+          ci/requirements/requirements-fab-provider-validation.txt
+
+          tests/ci/*.py
+
+          ci/scripts/*.py
+
+          '
+    - uses: ./ci/actions/install-python-deps
+      with:
+        requirements-files: 'ci/requirements/requirements-dev.txt
+
+          '
+    - name: Resolve quality test inventory from contract manifest
+      run: echo "QUALITY_TEST_FILES=$(python ci/scripts/list_contract_tests.py --suite quality)" >> "$GITHUB_ENV"
+    - name: Collect unit and smoke tests with verbose inventory
+      run: 'set -o pipefail
+
+        mkdir -p "$QUALITY_ARTIFACT_DIR"
+
+        python -m pytest --collect-only -q $PYTEST_VERBOSE_ARGS $QUALITY_TEST_FILES 2>&1 | tee "$QUALITY_ARTIFACT_DIR/pytest-collect.log"
+
+        python ci/scripts/report_solution_coverage.py 2>&1 | tee "$QUALITY_ARTIFACT_DIR/solution-coverage.log"
+
+        '
+    - if: always()
+      uses: ./ci/actions/upload-artifact-bundle
+      with:
+        name: quality-pytest-collect
+        path: '${{ env.QUALITY_ARTIFACT_DIR }}/pytest-collect.log
+
+          ${{ env.QUALITY_ARTIFACT_DIR }}/solution-coverage.log
+
+          .ci-artifacts/coverage-report/solution-coverage.json
+
+          .ci-artifacts/coverage-report/solution-coverage.md
+
+          '
+  ruff_lint:
+    name: ruff lint (Python ${{ inputs.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+      with: *id001
+    - uses: ./ci/actions/bootstrap-python
+      with:
+        python-version: ${{ inputs.python-version }}
+        cache-dependency-path: 'ci/requirements/requirements-dev.txt
+
+          ci/requirements/requirements-fab-provider-validation.txt
+
+          tests/ci/*.py
+
+          ci/scripts/*.py
+
+          '
+    - uses: ./ci/actions/install-python-deps
+      with:
+        requirements-files: 'ci/requirements/requirements-dev.txt
+
+          '
+    - run: python -m ruff check .
+  ruff_format:
+    name: ruff format check (Python ${{ inputs.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+      with: *id001
+    - uses: ./ci/actions/bootstrap-python
+      with:
+        python-version: ${{ inputs.python-version }}
+        cache-dependency-path: 'ci/requirements/requirements-dev.txt
+
+          ci/requirements/requirements-fab-provider-validation.txt
+
+          tests/ci/*.py
+
+          ci/scripts/*.py
+
+          '
+    - uses: ./ci/actions/install-python-deps
+      with:
+        requirements-files: 'ci/requirements/requirements-dev.txt
+
+          '
+    - run: python -m ruff format --check .
+  mypy_package:
+    name: mypy package (Python ${{ inputs.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+      with: *id001
+    - uses: ./ci/actions/bootstrap-python
+      with:
+        python-version: ${{ inputs.python-version }}
+        cache-dependency-path: 'ci/requirements/requirements-dev.txt
+
+          ci/requirements/requirements-fab-provider-validation.txt
+
+          tests/ci/*.py
+
+          ci/scripts/*.py
+
+          '
+    - uses: ./ci/actions/install-python-deps
+      with:
+        requirements-files: 'ci/requirements/requirements-dev.txt
+
+          '
+    - run: python -m mypy -p "$PACKAGE_NAME"
+  mypy_tests:
+    name: mypy tests + CI helpers (Python ${{ inputs.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+      with: *id001
+    - uses: ./ci/actions/bootstrap-python
+      with:
+        python-version: ${{ inputs.python-version }}
+        cache-dependency-path: 'ci/requirements/requirements-dev.txt
+
+          ci/requirements/requirements-fab-provider-validation.txt
+
+          tests/ci/*.py
+
+          ci/scripts/*.py
+
+          '
+    - uses: ./ci/actions/install-python-deps
+      with:
+        requirements-files: 'ci/requirements/requirements-dev.txt
+
+          '
+    - run: python -m mypy tests/ci ci/scripts
+  pytest_family_coverage:
+    name: pytest family coverage (${{ matrix.family }}, Python ${{ inputs.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - family: config-permissions-runtime
+        - family: role-mapping-rbac-compatibility
+        - family: api-ui-browser-session-observability
+        - family: provider-backends-and-rate-limits
+        - family: audit-logging-governance
+        - family: bootstrap-imports
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+      with: *id001
+    - uses: ./ci/actions/bootstrap-python
+      with:
+        python-version: ${{ inputs.python-version }}
+        cache-dependency-path: 'ci/requirements/requirements-dev.txt
+
+          ci/requirements/requirements-fab-provider-validation.txt
+
+          tests/ci/*.py
+
+          ci/scripts/*.py
+
+          '
+    - uses: ./ci/actions/install-python-deps
+      with:
+        requirements-files: 'ci/requirements/requirements-dev.txt
+
+          '
+    - name: Resolve family inventory and threshold
+      run: 'mkdir -p "$QUALITY_ARTIFACT_DIR"
+
+        echo "QUALITY_TEST_FILES=$(python ci/scripts/list_contract_tests.py --family ''${{ matrix.family }}'')" >> "$GITHUB_ENV"
+
+        echo "FAMILY_THRESHOLD=$(python ci/scripts/list_contract_tests.py --family ''${{ matrix.family }}'' --threshold)" >> "$GITHUB_ENV"
+
+        echo "FAMILY_COV_TARGETS=$(python ci/scripts/list_contract_tests.py --family ''${{ matrix.family }}'' --cov-targets)" >> "$GITHUB_ENV"
+
+        '
+    - uses: ./ci/actions/render-ci-scope-summary
+      with:
+        title: 'quality family: ${{ matrix.family }}'
+        family: ${{ matrix.family }}
+        output: $QUALITY_ARTIFACT_DIR/family-${{ matrix.family }}-scope.md
+    - name: Install official FAB provider for rbac-mirror family
+      if: ${{ matrix.family == 'role-mapping-rbac-compatibility' }}
+      run: 'set -euo pipefail
+
+        AIRFLOW_VERSION="$(python ci/scripts/ci_versions.py --key airflow.default)"
+
+        AIRFLOW_CONSTRAINTS_URL="https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-${{ inputs.python-version }}.txt"
+
+        echo "AIRFLOW_CONSTRAINTS_URL=$AIRFLOW_CONSTRAINTS_URL" >> "$GITHUB_ENV"
+
+        python -m pip install "apache-airflow==${AIRFLOW_VERSION}" --constraint "$AIRFLOW_CONSTRAINTS_URL"
+
+        python -m pip install "apache-airflow-providers-fab==$(python ci/scripts/ci_versions.py --key fab_provider.default)"
+
+        python -m pip install -r ci/requirements/requirements-fab-provider-validation.txt
+
+        python -m pip check
+
+        '
+    - name: Generate official FAB vs plugin support tables for role-mapping-rbac-compatibility family
+      if: ${{ matrix.family == 'role-mapping-rbac-compatibility' }}
+      run: "set +e\npython ci/scripts/validate_fab_mirror.py --artifact-dir \"$QUALITY_ARTIFACT_DIR\" 2>&1 | tee \"$QUALITY_ARTIFACT_DIR/fab-support-validation.log\"\nsupport_status=${PIPESTATUS[0]}\nset -e\necho \"$support_status\" > \"$QUALITY_ARTIFACT_DIR/fab-support-status.txt\"\nif [ -f \"$QUALITY_ARTIFACT_DIR/official-fab-permissions-support-summary.md\" ]; then\n  cat \"$QUALITY_ARTIFACT_DIR/official-fab-permissions-support-summary.md\" >> \"$GITHUB_STEP_SUMMARY\"\nfi\nif [ \"$support_status\" -ne 0 ]; then\n  echo \"- note: FAB support summary is informational in the quality family; the dedicated fab_provider_validation suite remains the authoritative compatibility gate.\" >> \"$GITHUB_STEP_SUMMARY\"\nfi\n"
+    - name: Run family coverage gate with detailed logs
+      run: "set -euo pipefail\nmkdir -p \"$QUALITY_ARTIFACT_DIR\"\ncov_args=()\nfor target in $FAMILY_COV_TARGETS; do\n  cov_args+=(\"--cov=$target\")\ndone\npython -m pytest $PYTEST_VERBOSE_ARGS \\\n  --maxfail=1 \\\n  --disable-warnings \\\n  --junitxml=\"$QUALITY_ARTIFACT_DIR/pytest-${{ matrix.family }}.xml\" \\\n  \"${cov_args[@]}\" \\\n  --cov-report=term-missing \\\n  --cov-report=xml:$QUALITY_ARTIFACT_DIR/coverage-${{ matrix.family }}.xml \\\n  --cov-fail-under=$FAMILY_THRESHOLD \\\n  $QUALITY_TEST_FILES 2>&1 | tee \"$QUALITY_ARTIFACT_DIR/pytest-${{ matrix.family }}.log\"\n"
+    - name: Upload family coverage artifacts
+      if: always()
+      uses: ./ci/actions/upload-artifact-bundle
+      with:
+        name: quality-family-${{ matrix.family }}
+        path: '${{ env.QUALITY_ARTIFACT_DIR }}/pytest-${{ matrix.family }}.log
+
+          ${{ env.QUALITY_ARTIFACT_DIR }}/pytest-${{ matrix.family }}.xml
+
+          ${{ env.QUALITY_ARTIFACT_DIR }}/coverage-${{ matrix.family }}.xml
+
+          ${{ env.QUALITY_ARTIFACT_DIR }}/family-${{ matrix.family }}-scope.md
+
+          ${{ env.QUALITY_ARTIFACT_DIR }}/fab-support-validation.log
+
+          ${{ env.QUALITY_ARTIFACT_DIR }}/official-fab-permissions-support-summary.md
+
+          ${{ env.QUALITY_ARTIFACT_DIR }}/fab-support-status.txt
+
+          '
+  pip_audit:
+    name: pip audit (Python ${{ inputs.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+      with: *id001
+    - uses: ./ci/actions/bootstrap-python
+      with:
+        python-version: ${{ inputs.python-version }}
+        cache-dependency-path: 'ci/requirements/requirements-dev.txt
+
+          ci/requirements/requirements-fab-provider-validation.txt
+
+          tests/ci/*.py
+
+          ci/scripts/*.py
+
+          '
+    - uses: ./ci/actions/install-python-deps
+      with:
+        requirements-files: 'ci/requirements/requirements-dev.txt
+
+          '
+    - name: Run pip audit with log capture
+      run: 'set -o pipefail
+
+        mkdir -p "$QUALITY_ARTIFACT_DIR"
+
+        python -m pip_audit 2>&1 | tee "$QUALITY_ARTIFACT_DIR/pip-audit.log"
+
+        '
+  summarize_quality:
+    name: quality artifact summary
+    runs-on: ubuntu-latest
+    if: ${{ always() }}
+    needs:
+    - pytest_collect
+    - pytest_family_coverage
+    - pip_audit
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+      with: *id001
+    - uses: ./ci/actions/bootstrap-python
+      with:
+        python-version: ${{ inputs.python-version }}
+        cache-dependency-path: 'ci/requirements/requirements-dev.txt
+
+          ci/requirements/requirements-fab-provider-validation.txt
+
+          tests/ci/*.py
+
+          ci/scripts/*.py
+
+          '
+    - uses: ./ci/actions/install-python-deps
+      with:
+        requirements-files: 'ci/requirements/requirements-dev.txt
+
+          '
+    - uses: ./ci/actions/render-ci-scope-summary
+      with:
+        title: quality suite contract scope
+        suite: quality
+        output: $QUALITY_ARTIFACT_DIR/quality-suite-scope.md
+    - name: Build quality suite artifact summary
+      uses: ./ci/actions/summarize-ci-artifacts
+      with:
+        artifact-dir: ${{ env.QUALITY_ARTIFACT_DIR }}
+        lane-name: quality suite
+        output-md: ${{ env.QUALITY_ARTIFACT_DIR }}/artifact-summary.md
+    - if: always()
+      uses: ./ci/actions/upload-artifact-bundle
+      with:
+        name: quality-suite-summary
+        path: '${{ env.QUALITY_ARTIFACT_DIR }}/artifact-summary.md
+
+          ${{ env.QUALITY_ARTIFACT_DIR }}/quality-suite-scope.md
+
+          ${{ env.QUALITY_ARTIFACT_DIR }}/pip-audit.log
+
+          '
+  summary:
+    name: quality summary
+    runs-on: ubuntu-latest
+    if: ${{ always() }}
+    needs:
+    - compile
+    - pytest_collect
+    - ruff_lint
+    - ruff_format
+    - mypy_package
+    - mypy_tests
+    - pytest_family_coverage
+    - pip_audit
+    - summarize_quality
+    steps:
+    - name: Print job results
+      run: "echo \"compile=${{ needs.compile.result }}\"\necho \"pytest_collect=${{ needs.pytest_collect.result }}\"\necho \"ruff_lint=${{ needs.ruff_lint.result }}\"\necho \"ruff_format=${{ needs.ruff_format.result }}\"\necho \"mypy_package=${{ needs.mypy_package.result }}\"\necho \"mypy_tests=${{ needs.mypy_tests.result }}\"\necho \"pytest_family_coverage=${{ needs.pytest_family_coverage.result }}\"\necho \"pip_audit=${{ needs.pip_audit.result }}\"\necho \"summarize_quality=${{ needs.summarize_quality.result }}\"\n{\n  echo \"# Quality suite summary\"\n  echo\n  echo \"| Job task | Executed | Result | Files or scope used | What was tested |\"\n  echo \"|---|---|---|---|---|\"\n  echo \"| compile | [x] yes | ${{ needs.compile.result }} | repository Python sources | syntax and bytecode compilation hygiene |\"\n  echo \"| pytest_collect | [x] yes | ${{ needs.pytest_collect.result }} | tests/ci selected by quality suite | test discovery and repository coverage catalog generation |\"\n  echo\
+        \ \"| ruff_lint | [x] yes | ${{ needs.ruff_lint.result }} | repository Python sources, tests/ci, ci/scripts | lint and import-quality checks |\"\n  echo \"| ruff_format | [x] yes | ${{ needs.ruff_format.result }} | repository Python sources, tests/ci, ci/scripts | formatting compliance |\"\n  echo \"| mypy_package | [x] yes | ${{ needs.mypy_package.result }} | rbac_providers_auth_manager/** | package typing surface |\"\n  echo \"| mypy_tests | [x] yes | ${{ needs.mypy_tests.result }} | tests/ci/**/*.py, ci/scripts/**/*.py | CI test and helper typing surface |\"\n  echo \"| pytest_family_coverage | [x] yes | ${{ needs.pytest_family_coverage.result }} | config-permissions-runtime, role-mapping-rbac-compatibility, api-ui-browser-session-observability, provider-backends-and-rate-limits, audit-logging-governance, bootstrap-imports | functional contract coverage by plugin area |\"\n  echo \"| pip_audit | [x] yes | ${{ needs.pip_audit.result }} | installed dependency environment | known\
+        \ Python package vulnerabilities |\"\n  echo \"| summarize_quality | [x] yes | ${{ needs.summarize_quality.result }} | quality artifacts | artifact-level evidence synthesis |\"\n  echo\n  echo \"Expected artifacts: quality-pytest-collect, quality-family-*, quality-suite-summary\"\n} >> \"$GITHUB_STEP_SUMMARY\"\n"
+    - name: Fail if any job failed
+      run: "results=(\n  \"${{ needs.compile.result }}\"\n  \"${{ needs.pytest_collect.result }}\"\n  \"${{ needs.ruff_lint.result }}\"\n  \"${{ needs.ruff_format.result }}\"\n  \"${{ needs.mypy_package.result }}\"\n  \"${{ needs.mypy_tests.result }}\"\n  \"${{ needs.pytest_family_coverage.result }}\"\n  \"${{ needs.pip_audit.result }}\"\n  \"${{ needs.summarize_quality.result }}\"\n)\nfor result in \"${results[@]}\"; do\n  if [ \"$result\" != \"success\" ]; then\n    echo \"At least one quality job failed.\"\n    exit 1\n  fi\ndone\necho \"All quality jobs passed.\"\n"

@@ -1,0 +1,36 @@
+name: install Python dependencies
+description: Install Python dependency files and optional extra packages for CI jobs.
+inputs:
+  requirements-files:
+    description: Newline-delimited requirement files to install.
+    required: false
+    default: ''
+  extra-packages:
+    description: Extra packages to install after requirements files.
+    required: false
+    default: ''
+  run-pip-check:
+    description: Whether to run python -m pip check after installation.
+    required: false
+    default: 'true'
+runs:
+  using: composite
+  steps:
+    - name: Upgrade packaging tools
+      shell: bash
+      run: python -m pip install --upgrade pip setuptools wheel
+    - name: Install requirements and optional packages
+      shell: bash
+      run: |
+        set -euo pipefail
+        while IFS= read -r requirement_file; do
+          if [ -n "$requirement_file" ]; then
+            python -m pip install -r "$requirement_file"
+          fi
+        done <<< "${{ inputs.requirements-files }}"
+        if [ -n "${{ inputs.extra-packages }}" ]; then
+          python -m pip install ${{ inputs.extra-packages }}
+        fi
+        if [ "${{ inputs.run-pip-check }}" = "true" ]; then
+          python -m pip check
+        fi

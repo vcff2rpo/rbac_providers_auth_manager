@@ -1,0 +1,8 @@
+{
+  "expect": "success",
+  "assertions": {
+    "role_filters.role_to_filters.Scoped.dag_tags": ["critical", "finance"],
+    "role_filters.role_to_filters.Scoped.environments": ["dr", "prod"],
+    "role_filters.role_to_filters.Scoped.resource_prefixes": ["adhoc_", "dag_"]
+  }
+}

@@ -1,0 +1,244 @@
+name: manual CI gate
+on:
+  workflow_dispatch:
+    inputs:
+      run_deep_validation:
+        description: Run deep validation unit, mock, coverage, and dead-code jobs
+        required: true
+        default: true
+        type: boolean
+      run_airflow:
+        description: Run Airflow installation and integration smoke tests
+        required: true
+        default: true
+        type: boolean
+      run_idp_integration:
+        description: Run LDAP and Entra integration-style tests
+        required: true
+        default: true
+        type: boolean
+      run_fab_provider_validation:
+        description: Run official FAB provider 3.5.0 mirror validation
+        required: true
+        default: true
+        type: boolean
+      run_nightly_compatibility:
+        description: Run scheduled-style compatibility matrix in manual CI
+        required: true
+        default: false
+        type: boolean
+      run_external_real_validation:
+        description: Run optional DB-backed and real external identity validation lane
+        required: true
+        default: false
+        type: boolean
+      run_license_compliance:
+        description: Run OSS license, SBOM, and static security compliance lane
+        required: true
+        default: true
+        type: boolean
+      require_external_secrets:
+        description: Fail instead of skip when external LDAP/Entra variables are missing
+        required: true
+        default: false
+        type: boolean
+      create_review_pr:
+        description: Create a new core-only promotion branch and PR to main only after all enabled gates succeed
+        required: true
+        default: true
+        type: boolean
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+jobs:
+  resolve_ci_context:
+    runs-on: ubuntu-latest
+    outputs:
+      python_primary: ${{ steps.context.outputs.python_primary }}
+      python_secondary: ${{ steps.context.outputs.python_secondary }}
+      python_deep_validation: ${{ steps.context.outputs.python_deep_validation }}
+      python_nightly: ${{ steps.context.outputs.python_nightly }}
+      airflow_default: ${{ steps.context.outputs.airflow_default }}
+      airflow_nightly: ${{ steps.context.outputs.airflow_nightly }}
+      fab_provider_default: ${{ steps.context.outputs.fab_provider_default }}
+      fab_provider_nightly: ${{ steps.context.outputs.fab_provider_nightly }}
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+      with: &id001
+        fetch-depth: 0
+    - uses: ./ci/actions/bootstrap-python
+      with:
+        python-version: '3.13'
+    - id: context
+      uses: ./ci/actions/export-ci-context
+  ci_self_check:
+    needs: resolve_ci_context
+    uses: ./.github/workflows/reusable_ci_self_check.yml
+    with:
+      python-version: ${{ needs.resolve_ci_context.outputs.python_primary }}
+  quality:
+    needs: resolve_ci_context
+    uses: ./.github/workflows/reusable_quality.yml
+    with:
+      package-name: rbac_providers_auth_manager
+      python-version: ${{ needs.resolve_ci_context.outputs.python_primary }}
+  deep_validation:
+    needs: resolve_ci_context
+    if: ${{ inputs.run_deep_validation }}
+    uses: ./.github/workflows/reusable_deep_validation.yml
+    with:
+      package-name: rbac_providers_auth_manager
+      python-versions: ${{ needs.resolve_ci_context.outputs.python_deep_validation }}
+      coverage-min: 25
+  airflow_suite:
+    needs: resolve_ci_context
+    if: ${{ inputs.run_airflow }}
+    uses: ./.github/workflows/reusable_airflow_suite.yml
+    with:
+      package-name: rbac_providers_auth_manager
+      airflow-version: ${{ needs.resolve_ci_context.outputs.airflow_default }}
+      py312-version: ${{ needs.resolve_ci_context.outputs.python_secondary }}
+      py313-version: ${{ needs.resolve_ci_context.outputs.python_primary }}
+  identity_provider_integration:
+    needs: resolve_ci_context
+    if: ${{ inputs.run_idp_integration }}
+    uses: ./.github/workflows/reusable_identity_provider_integration.yml
+    with:
+      package-name: rbac_providers_auth_manager
+      python-version: ${{ needs.resolve_ci_context.outputs.python_primary }}
+  fab_provider_validation:
+    needs: resolve_ci_context
+    if: ${{ inputs.run_fab_provider_validation }}
+    uses: ./.github/workflows/reusable_fab_provider_suite.yml
+    with:
+      package-name: rbac_providers_auth_manager
+      airflow-version: ${{ needs.resolve_ci_context.outputs.airflow_default }}
+      fab-provider-version: ${{ needs.resolve_ci_context.outputs.fab_provider_default }}
+      py312-version: ${{ needs.resolve_ci_context.outputs.python_secondary }}
+      py313-version: ${{ needs.resolve_ci_context.outputs.python_primary }}
+  nightly_compatibility:
+    needs: resolve_ci_context
+    if: ${{ inputs.run_nightly_compatibility }}
+    uses: ./.github/workflows/reusable_nightly_compatibility.yml
+    with:
+      package-name: rbac_providers_auth_manager
+      airflow-versions: ${{ needs.resolve_ci_context.outputs.airflow_nightly }}
+      fab-provider-versions: ${{ needs.resolve_ci_context.outputs.fab_provider_nightly }}
+      python-versions: ${{ needs.resolve_ci_context.outputs.python_nightly }}
+  external_real_validation:
+    needs: resolve_ci_context
+    if: ${{ inputs.run_external_real_validation }}
+    uses: ./.github/workflows/reusable_external_real_validation.yml
+    with:
+      package-name: rbac_providers_auth_manager
+      airflow-version: ${{ needs.resolve_ci_context.outputs.airflow_default }}
+      fab-provider-version: ${{ needs.resolve_ci_context.outputs.fab_provider_default }}
+      python-version: ${{ needs.resolve_ci_context.outputs.python_primary }}
+      require-external-secrets: ${{ inputs.require_external_secrets }}
+  license_compliance:
+    needs: resolve_ci_context
+    if: ${{ inputs.run_license_compliance }}
+    uses: ./.github/workflows/reusable_license_compliance.yml
+    with:
+      package-name: rbac_providers_auth_manager
+      python-version: ${{ needs.resolve_ci_context.outputs.python_primary }}
+  review_pr_gate:
+    if: ${{ always() && github.ref_type == 'branch' && github.ref_name != 'main' }}
+    needs:
+    - resolve_ci_context
+    - quality
+    - deep_validation
+    - airflow_suite
+    - identity_provider_integration
+    - fab_provider_validation
+    - nightly_compatibility
+    - external_real_validation
+    - license_compliance
+    permissions:
+      contents: write
+      pull-requests: write
+    secrets: inherit
+    uses: ./.github/workflows/reusable_review_pr_gate.yml
+    with:
+      create-review-pr: ${{ inputs.create_review_pr }}
+      source-branch: ${{ github.ref_name }}
+      base-branch: main
+      review-branch-prefix: ${{ format('ready/{0}', github.ref_name) }}
+      pr-title: '${{ format(''Review: {0} ready for main'', github.ref_name) }}'
+      quality-result: ${{ needs.quality.result }}
+      deep-validation-enabled: ${{ inputs.run_deep_validation }}
+      deep-validation-result: ${{ inputs.run_deep_validation && needs.deep_validation.result || 'skipped' }}
+      airflow-enabled: ${{ inputs.run_airflow }}
+      airflow-result: ${{ inputs.run_airflow && needs.airflow_suite.outputs.result_summary || 'skipped' }}
+      airflow-suite-result: ${{ inputs.run_airflow && needs.airflow_suite.result || 'skipped' }}
+      idp-enabled: ${{ inputs.run_idp_integration }}
+      idp-result: ${{ inputs.run_idp_integration && needs.identity_provider_integration.result || 'skipped' }}
+      fab-provider-enabled: ${{ inputs.run_fab_provider_validation }}
+      fab-provider-result: ${{ inputs.run_fab_provider_validation && needs.fab_provider_validation.outputs.result_summary || 'skipped' }}
+      fab-provider-suite-result: ${{ inputs.run_fab_provider_validation && needs.fab_provider_validation.result || 'skipped' }}
+      nightly-compatibility-enabled: ${{ inputs.run_nightly_compatibility }}
+      nightly-compatibility-result: ${{ inputs.run_nightly_compatibility && needs.nightly_compatibility.result || 'skipped' }}
+      external-real-validation-enabled: ${{ inputs.run_external_real_validation }}
+      external-real-validation-result: ${{ inputs.run_external_real_validation && needs.external_real_validation.result || 'skipped' }}
+      license-compliance-enabled: ${{ inputs.run_license_compliance }}
+      license-compliance-result: ${{ inputs.run_license_compliance && needs.license_compliance.result || 'skipped' }}
+      run-url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      source-sha: ${{ github.sha }}
+  final_summary:
+    if: ${{ always() }}
+    needs:
+    - resolve_ci_context
+    - ci_self_check
+    - quality
+    - deep_validation
+    - airflow_suite
+    - identity_provider_integration
+    - fab_provider_validation
+    - nightly_compatibility
+    - external_real_validation
+    - license_compliance
+    - review_pr_gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+      with: *id001
+    - uses: ./ci/actions/bootstrap-python
+      with:
+        python-version: ${{ needs.resolve_ci_context.outputs.python_primary }}
+    - uses: ./ci/actions/render-final-ci-summary
+      with:
+        output-dir: .ci-artifacts/final-summary
+        run-url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        source-sha: ${{ github.sha }}
+        ci_self_check-enabled: 'true'
+        ci_self_check-result: ${{ needs.ci_self_check.result }}
+        quality-enabled: 'true'
+        quality-result: ${{ needs.quality.result }}
+        deep_validation-enabled: ${{ inputs.run_deep_validation }}
+        deep_validation-result: ${{ inputs.run_deep_validation && needs.deep_validation.result || 'skipped' }}
+        airflow_integration-enabled: ${{ inputs.run_airflow }}
+        airflow_integration-result: ${{ inputs.run_airflow && needs.airflow_suite.result || 'skipped' }}
+        identity_provider_integration-enabled: ${{ inputs.run_idp_integration }}
+        identity_provider_integration-result: ${{ inputs.run_idp_integration && needs.identity_provider_integration.result || 'skipped' }}
+        fab_provider_validation-enabled: ${{ inputs.run_fab_provider_validation }}
+        fab_provider_validation-result: ${{ inputs.run_fab_provider_validation && needs.fab_provider_validation.result || 'skipped' }}
+        nightly_compatibility-enabled: ${{ inputs.run_nightly_compatibility }}
+        nightly_compatibility-result: ${{ inputs.run_nightly_compatibility && needs.nightly_compatibility.result || 'skipped' }}
+        external_real_validation-enabled: ${{ inputs.run_external_real_validation }}
+        external_real_validation-result: ${{ inputs.run_external_real_validation && needs.external_real_validation.result || 'skipped' }}
+        license_compliance-enabled: ${{ inputs.run_license_compliance }}
+        license_compliance-result: ${{ inputs.run_license_compliance && needs.license_compliance.result || 'skipped' }}
+    - name: Upload final summary artifacts
+      if: always()
+      uses: ./ci/actions/upload-artifact-bundle
+      with:
+        name: final-ci-summary
+        path: .ci-artifacts/final-summary

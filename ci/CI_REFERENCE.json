@@ -1,0 +1,1089 @@
+{
+  "inventory": {
+    "actions": [
+      "actions/bootstrap-python/action.yml",
+      "actions/export-ci-context/action.yml",
+      "actions/install-ldap-build-deps/action.yml",
+      "actions/install-python-deps/action.yml",
+      "actions/render-ci-ownership/action.yml",
+      "actions/render-ci-reference/action.yml",
+      "actions/render-ci-scope-summary/action.yml",
+      "actions/render-ci-workflow-inputs/action.yml",
+      "actions/render-final-ci-summary/action.yml",
+      "actions/render-project-ci-overview/action.yml",
+      "actions/resolve-airflow-constraints/action.yml",
+      "actions/summarize-ci-artifacts/action.yml",
+      "actions/upload-artifact-bundle/action.yml",
+      "actions/validate-ci-governance/action.yml"
+    ],
+    "bash_helpers": [
+      "bash/check_airflow_auth_surface.sh",
+      "bash/check_airflow_discovery.sh",
+      "bash/install_python_ldap_build_deps.sh"
+    ],
+    "config": [
+      "config/core_promotion_allowlist.txt",
+      "config/path_filters.json",
+      "config/versions.json"
+    ],
+    "lanes": [
+      {
+        "artifact_prefix": "ci-self-check",
+        "blocking": false,
+        "cadence": "per-change on CI-owned files",
+        "lane": "ci_self_check",
+        "notes": "Fast CI integrity lane for workflows, actions, registries, and summaries.",
+        "secrets_profile": "none",
+        "summary_group": "ci-infrastructure",
+        "workflow": "reusable_ci_self_check.yml"
+      },
+      {
+        "artifact_prefix": "quality",
+        "blocking": true,
+        "cadence": "per-change",
+        "lane": "quality",
+        "notes": "Fast lint, typing, unit, and family coverage gates.",
+        "secrets_profile": "none",
+        "summary_group": "core-quality",
+        "workflow": "reusable_quality.yml"
+      },
+      {
+        "artifact_prefix": "deep-validation",
+        "blocking": true,
+        "cadence": "per-change optional",
+        "lane": "deep_validation",
+        "notes": "Area-sharded coverage, dead-code, and wider behavioral validation.",
+        "secrets_profile": "none",
+        "summary_group": "deep-validation",
+        "workflow": "reusable_deep_validation.yml"
+      },
+      {
+        "artifact_prefix": "airflow-integration",
+        "blocking": true,
+        "cadence": "per-change optional",
+        "lane": "airflow_integration",
+        "notes": "Bootstraps Airflow runtime and validates plugin install/import health.",
+        "secrets_profile": "none",
+        "summary_group": "integration",
+        "workflow": "reusable_airflow_integration.yml"
+      },
+      {
+        "artifact_prefix": "idp-integration",
+        "blocking": true,
+        "cadence": "per-change optional",
+        "lane": "identity_provider_integration",
+        "notes": "Exercises LDAP and Entra integration-style flows without external enterprise secrets.",
+        "secrets_profile": "test-services",
+        "summary_group": "integration",
+        "workflow": "reusable_identity_provider_integration.yml"
+      },
+      {
+        "artifact_prefix": "fab-provider-validation",
+        "blocking": true,
+        "cadence": "per-change optional",
+        "lane": "fab_provider_validation",
+        "notes": "Installs official FAB provider and checks mirror drift.",
+        "secrets_profile": "none",
+        "summary_group": "compatibility",
+        "workflow": "reusable_fab_provider_validation.yml"
+      },
+      {
+        "artifact_prefix": "nightly-compatibility",
+        "blocking": false,
+        "cadence": "nightly or manual",
+        "lane": "nightly_compatibility",
+        "notes": "Matrix canary against pinned Airflow and FAB versions.",
+        "secrets_profile": "none",
+        "summary_group": "compatibility",
+        "workflow": "reusable_nightly_compatibility.yml"
+      },
+      {
+        "artifact_prefix": "external-real-validation",
+        "blocking": false,
+        "cadence": "manual opt-in",
+        "lane": "external_real_validation",
+        "notes": "Requires real external identity and DB-backed resources.",
+        "secrets_profile": "external-real",
+        "summary_group": "external-validation",
+        "workflow": "reusable_external_real_validation.yml"
+      },
+      {
+        "artifact_prefix": "license-compliance",
+        "blocking": true,
+        "cadence": "per-change optional",
+        "lane": "license_compliance",
+        "notes": "OSS compliance, build smoke, SBOM, and static security.",
+        "secrets_profile": "none",
+        "summary_group": "release-readiness",
+        "workflow": "reusable_license_compliance.yml"
+      }
+    ],
+    "python_helpers": [
+      "scripts/bootstrap_airflow_runtime.py",
+      "scripts/check_license_compliance.py",
+      "scripts/check_release_readiness.py",
+      "scripts/ci_catalog_registry.py",
+      "scripts/ci_lane_policy.py",
+      "scripts/ci_path_filters.py",
+      "scripts/ci_summary_catalog.py",
+      "scripts/ci_versions.py",
+      "scripts/create_hello_world_dag.py",
+      "scripts/idp_ldap_bind_smoke.py",
+      "scripts/idp_wait_for_ldap.py",
+      "scripts/list_contract_tests.py",
+      "scripts/render_ci_inventory.py",
+      "scripts/render_ci_ownership.py",
+      "scripts/render_ci_reference.py",
+      "scripts/render_ci_scope_summary.py",
+      "scripts/render_ci_workflow_inputs.py",
+      "scripts/render_final_ci_summary.py",
+      "scripts/render_project_ci_overview.py",
+      "scripts/render_static_security_summary.py",
+      "scripts/report_requirements_usage.py",
+      "scripts/report_solution_coverage.py",
+      "scripts/summarize_ci_artifacts.py",
+      "scripts/summarize_sbom.py",
+      "scripts/validate_fab_mirror.py",
+      "scripts/write_airflow_ci_config.py"
+    ],
+    "requirements": [
+      "requirements/requirements-airflow-integration.txt",
+      "requirements/requirements-dev.txt",
+      "requirements/requirements-external-real-validation.txt",
+      "requirements/requirements-fab-provider-validation.txt"
+    ],
+    "workflows": [
+      "ci.yml",
+      "ci_self_check.yml",
+      "compliance_fast.yml",
+      "nightly_compatibility.yml",
+      "quality_fast.yml",
+      "reusable_airflow_integration.yml",
+      "reusable_airflow_suite.yml",
+      "reusable_ci_self_check.yml",
+      "reusable_deep_validation.yml",
+      "reusable_external_real_validation.yml",
+      "reusable_fab_provider_suite.yml",
+      "reusable_fab_provider_validation.yml",
+      "reusable_identity_provider_integration.yml",
+      "reusable_license_compliance.yml",
+      "reusable_nightly_compatibility.yml",
+      "reusable_open_pr.yml",
+      "reusable_quality.yml",
+      "reusable_review_pr_gate.yml"
+    ]
+  },
+  "lane_policies": [
+    {
+      "artifact_prefix": "ci-self-check",
+      "blocking": false,
+      "cadence": "per-change on CI-owned files",
+      "lane": "ci_self_check",
+      "notes": "Fast CI integrity lane for workflows, actions, registries, and summaries.",
+      "secrets_profile": "none",
+      "summary_group": "ci-infrastructure",
+      "workflow": "reusable_ci_self_check.yml"
+    },
+    {
+      "artifact_prefix": "quality",
+      "blocking": true,
+      "cadence": "per-change",
+      "lane": "quality",
+      "notes": "Fast lint, typing, unit, and family coverage gates.",
+      "secrets_profile": "none",
+      "summary_group": "core-quality",
+      "workflow": "reusable_quality.yml"
+    },
+    {
+      "artifact_prefix": "deep-validation",
+      "blocking": true,
+      "cadence": "per-change optional",
+      "lane": "deep_validation",
+      "notes": "Area-sharded coverage, dead-code, and wider behavioral validation.",
+      "secrets_profile": "none",
+      "summary_group": "deep-validation",
+      "workflow": "reusable_deep_validation.yml"
+    },
+    {
+      "artifact_prefix": "airflow-integration",
+      "blocking": true,
+      "cadence": "per-change optional",
+      "lane": "airflow_integration",
+      "notes": "Bootstraps Airflow runtime and validates plugin install/import health.",
+      "secrets_profile": "none",
+      "summary_group": "integration",
+      "workflow": "reusable_airflow_integration.yml"
+    },
+    {
+      "artifact_prefix": "idp-integration",
+      "blocking": true,
+      "cadence": "per-change optional",
+      "lane": "identity_provider_integration",
+      "notes": "Exercises LDAP and Entra integration-style flows without external enterprise secrets.",
+      "secrets_profile": "test-services",
+      "summary_group": "integration",
+      "workflow": "reusable_identity_provider_integration.yml"
+    },
+    {
+      "artifact_prefix": "fab-provider-validation",
+      "blocking": true,
+      "cadence": "per-change optional",
+      "lane": "fab_provider_validation",
+      "notes": "Installs official FAB provider and checks mirror drift.",
+      "secrets_profile": "none",
+      "summary_group": "compatibility",
+      "workflow": "reusable_fab_provider_validation.yml"
+    },
+    {
+      "artifact_prefix": "nightly-compatibility",
+      "blocking": false,
+      "cadence": "nightly or manual",
+      "lane": "nightly_compatibility",
+      "notes": "Matrix canary against pinned Airflow and FAB versions.",
+      "secrets_profile": "none",
+      "summary_group": "compatibility",
+      "workflow": "reusable_nightly_compatibility.yml"
+    },
+    {
+      "artifact_prefix": "external-real-validation",
+      "blocking": false,
+      "cadence": "manual opt-in",
+      "lane": "external_real_validation",
+      "notes": "Requires real external identity and DB-backed resources.",
+      "secrets_profile": "external-real",
+      "summary_group": "external-validation",
+      "workflow": "reusable_external_real_validation.yml"
+    },
+    {
+      "artifact_prefix": "license-compliance",
+      "blocking": true,
+      "cadence": "per-change optional",
+      "lane": "license_compliance",
+      "notes": "OSS compliance, build smoke, SBOM, and static security.",
+      "secrets_profile": "none",
+      "summary_group": "release-readiness",
+      "workflow": "reusable_license_compliance.yml"
+    }
+  ],
+  "path_filters": {
+    "workflows": {
+      "ci_self_check": {
+        "pull_request": [
+          ".github/workflows/**",
+          "ci/**",
+          "tests/ci/**",
+          "pyproject.toml",
+          "pytest.ini",
+          "mypy.ini",
+          "docs/CI_OVERVIEW.md"
+        ],
+        "push": [
+          ".github/workflows/**",
+          "ci/**",
+          "tests/ci/**",
+          "pyproject.toml",
+          "pytest.ini",
+          "mypy.ini",
+          "docs/CI_OVERVIEW.md"
+        ]
+      },
+      "compliance_fast": {
+        "pull_request": [
+          ".github/workflows/reusable_license_compliance.yml",
+          ".github/workflows/compliance_fast.yml",
+          "LICENSE",
+          "NOTICE",
+          "REUSE.toml",
+          "LICENSES/**",
+          ".gitleaks.toml",
+          "pyproject.toml",
+          "setup.py",
+          "ci/**"
+        ],
+        "push": [
+          ".github/workflows/reusable_license_compliance.yml",
+          ".github/workflows/compliance_fast.yml",
+          "LICENSE",
+          "NOTICE",
+          "REUSE.toml",
+          "LICENSES/**",
+          ".gitleaks.toml",
+          "pyproject.toml",
+          "setup.py",
+          "ci/**"
+        ]
+      },
+      "quality_fast": {
+        "pull_request": [
+          "__init__.py",
+          "api/**",
+          "auth_manager.py",
+          "authorization/**",
+          "compatibility/**",
+          "config.py",
+          "config_runtime/**",
+          "core/**",
+          "entrypoints/**",
+          "identity/**",
+          "providers/**",
+          "runtime/**",
+          "services/**",
+          "ui/**",
+          "tests/**",
+          ".github/workflows/reusable_quality.yml",
+          ".github/workflows/quality_fast.yml",
+          "ci/**",
+          "pyproject.toml",
+          "pytest.ini",
+          "mypy.ini"
+        ],
+        "push": [
+          "__init__.py",
+          "api/**",
+          "auth_manager.py",
+          "authorization/**",
+          "compatibility/**",
+          "config.py",
+          "config_runtime/**",
+          "core/**",
+          "entrypoints/**",
+          "identity/**",
+          "providers/**",
+          "runtime/**",
+          "services/**",
+          "ui/**",
+          "tests/**",
+          ".github/workflows/reusable_quality.yml",
+          ".github/workflows/quality_fast.yml",
+          "ci/**",
+          "pyproject.toml",
+          "pytest.ini",
+          "mypy.ini"
+        ]
+      }
+    }
+  },
+  "versions": {
+    "airflow": {
+      "default": "3.1.8",
+      "nightly": [
+        "3.1.8"
+      ]
+    },
+    "fab_provider": {
+      "default": "3.5.0",
+      "nightly": [
+        "3.5.0"
+      ]
+    },
+    "python": {
+      "deep_validation": [
+        "3.12",
+        "3.13"
+      ],
+      "nightly": [
+        "3.12",
+        "3.13"
+      ],
+      "primary": "3.13",
+      "secondary": "3.12"
+    },
+    "requirements": {
+      "airflow_integration": "ci/requirements/requirements-airflow-integration.txt",
+      "dev": "ci/requirements/requirements-dev.txt",
+      "external_real_validation": "ci/requirements/requirements-external-real-validation.txt",
+      "fab_provider_validation": "ci/requirements/requirements-fab-provider-validation.txt"
+    }
+  },
+  "workflow_inputs": {
+    "reusable_workflows": [
+      {
+        "inputs": [
+          {
+            "default": "3.1.8",
+            "description": "Airflow version to install",
+            "name": "airflow-version",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "rbac_providers_auth_manager",
+            "description": "Python package name",
+            "name": "package-name",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "",
+            "description": "Python version for integration test",
+            "name": "python-version",
+            "required": "true",
+            "type": "string"
+          }
+        ],
+        "name": "reusable airflow integration",
+        "path": ".github/workflows/reusable_airflow_integration.yml",
+        "workflow": "reusable_airflow_integration"
+      },
+      {
+        "inputs": [
+          {
+            "default": "3.1.8",
+            "description": "Airflow version to install",
+            "name": "airflow-version",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "rbac_providers_auth_manager",
+            "description": "Python package name",
+            "name": "package-name",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "3.12",
+            "description": "Python version for the first Airflow integration lane",
+            "name": "py312-version",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "3.13",
+            "description": "Python version for the second Airflow integration lane",
+            "name": "py313-version",
+            "required": "false",
+            "type": "string"
+          }
+        ],
+        "name": "reusable airflow suite",
+        "path": ".github/workflows/reusable_airflow_suite.yml",
+        "workflow": "reusable_airflow_suite"
+      },
+      {
+        "inputs": [
+          {
+            "default": "3.13",
+            "description": "",
+            "name": "python-version",
+            "required": "false",
+            "type": "string"
+          }
+        ],
+        "name": "reusable CI self check",
+        "path": ".github/workflows/reusable_ci_self_check.yml",
+        "workflow": "reusable_ci_self_check"
+      },
+      {
+        "inputs": [
+          {
+            "default": "25",
+            "description": "Minimum acceptable line coverage percent for unit/mock tests",
+            "name": "coverage-min",
+            "required": "false",
+            "type": "number"
+          },
+          {
+            "default": "rbac_providers_auth_manager",
+            "description": "Python package name",
+            "name": "package-name",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "[\"3.12\", \"3.13\"]",
+            "description": "JSON array of Python versions for the unit/mock test matrix",
+            "name": "python-versions",
+            "required": "false",
+            "type": "string"
+          }
+        ],
+        "name": "reusable deep validation",
+        "path": ".github/workflows/reusable_deep_validation.yml",
+        "workflow": "reusable_deep_validation"
+      },
+      {
+        "inputs": [
+          {
+            "default": "3.1.8",
+            "description": "Airflow version to install for DB-backed validation",
+            "name": "airflow-version",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "3.5.0",
+            "description": "FAB provider version for DB-backed validation",
+            "name": "fab-provider-version",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "rbac_providers_auth_manager",
+            "description": "Python package name",
+            "name": "package-name",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "3.13",
+            "description": "Python version for external validation",
+            "name": "python-version",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "false",
+            "description": "Fail instead of skip when external LDAP/Entra secrets are missing",
+            "name": "require-external-secrets",
+            "required": "false",
+            "type": "boolean"
+          }
+        ],
+        "name": "reusable external real validation",
+        "path": ".github/workflows/reusable_external_real_validation.yml",
+        "workflow": "reusable_external_real_validation"
+      },
+      {
+        "inputs": [
+          {
+            "default": "3.1.8",
+            "description": "Airflow version to install for provider mirror validation",
+            "name": "airflow-version",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "3.5.0",
+            "description": "apache-airflow-providers-fab version to validate against",
+            "name": "fab-provider-version",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "rbac_providers_auth_manager",
+            "description": "Python package name",
+            "name": "package-name",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "3.12",
+            "description": "Python version for first FAB provider validation lane",
+            "name": "py312-version",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "3.13",
+            "description": "Python version for second FAB provider validation lane",
+            "name": "py313-version",
+            "required": "false",
+            "type": "string"
+          }
+        ],
+        "name": "reusable FAB provider validation suite",
+        "path": ".github/workflows/reusable_fab_provider_suite.yml",
+        "workflow": "reusable_fab_provider_suite"
+      },
+      {
+        "inputs": [
+          {
+            "default": "3.1.8",
+            "description": "Airflow version to install for provider mirror validation",
+            "name": "airflow-version",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "3.5.0",
+            "description": "apache-airflow-providers-fab version to validate against",
+            "name": "fab-provider-version",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "rbac_providers_auth_manager",
+            "description": "Python package name",
+            "name": "package-name",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "3.13",
+            "description": "Python version for provider mirror validation",
+            "name": "python-version",
+            "required": "false",
+            "type": "string"
+          }
+        ],
+        "name": "reusable FAB provider mirror validation",
+        "path": ".github/workflows/reusable_fab_provider_validation.yml",
+        "workflow": "reusable_fab_provider_validation"
+      },
+      {
+        "inputs": [
+          {
+            "default": "rbac_providers_auth_manager",
+            "description": "Python package name",
+            "name": "package-name",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "3.13",
+            "description": "Python version for identity-provider integration tests",
+            "name": "python-version",
+            "required": "false",
+            "type": "string"
+          }
+        ],
+        "name": "reusable identity provider integration",
+        "path": ".github/workflows/reusable_identity_provider_integration.yml",
+        "workflow": "reusable_identity_provider_integration"
+      },
+      {
+        "inputs": [
+          {
+            "default": "rbac_providers_auth_manager",
+            "description": "Python package name",
+            "name": "package-name",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "3.13",
+            "description": "Python version for compliance tooling",
+            "name": "python-version",
+            "required": "false",
+            "type": "string"
+          }
+        ],
+        "name": "reusable license compliance",
+        "path": ".github/workflows/reusable_license_compliance.yml",
+        "workflow": "reusable_license_compliance"
+      },
+      {
+        "inputs": [
+          {
+            "default": "[\"3.1.8\"]",
+            "description": "JSON array of Airflow versions",
+            "name": "airflow-versions",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "[\"3.5.0\"]",
+            "description": "JSON array of FAB provider versions",
+            "name": "fab-provider-versions",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "rbac_providers_auth_manager",
+            "description": "Python package name",
+            "name": "package-name",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "[\"3.12\", \"3.13\"]",
+            "description": "JSON array of Python versions",
+            "name": "python-versions",
+            "required": "false",
+            "type": "string"
+          }
+        ],
+        "name": "reusable nightly compatibility",
+        "path": ".github/workflows/reusable_nightly_compatibility.yml",
+        "workflow": "reusable_nightly_compatibility"
+      },
+      {
+        "inputs": [
+          {
+            "default": "unknown",
+            "description": "",
+            "name": "airflow_result",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "main",
+            "description": "",
+            "name": "base_branch",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "ci/config/core_promotion_allowlist.txt",
+            "description": "",
+            "name": "core_only_manifest",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "unknown",
+            "description": "",
+            "name": "deep_validation_result",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "unknown",
+            "description": "",
+            "name": "external_real_validation_result",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "unknown",
+            "description": "",
+            "name": "fab_provider_result",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "unknown",
+            "description": "",
+            "name": "idp_result",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "unknown",
+            "description": "",
+            "name": "license_compliance_result",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "unknown",
+            "description": "",
+            "name": "nightly_compatibility_result",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "Review: feature-branch ready for main",
+            "description": "",
+            "name": "pr_title",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "unknown",
+            "description": "",
+            "name": "quality_result",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "ready/feature-branch",
+            "description": "",
+            "name": "review_branch_prefix",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "",
+            "description": "",
+            "name": "run_url",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "feature-branch",
+            "description": "",
+            "name": "source_branch",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "",
+            "description": "",
+            "name": "source_sha",
+            "required": "false",
+            "type": "string"
+          }
+        ],
+        "name": "reusable open pr",
+        "path": ".github/workflows/reusable_open_pr.yml",
+        "workflow": "reusable_open_pr"
+      },
+      {
+        "inputs": [
+          {
+            "default": "rbac_providers_auth_manager",
+            "description": "Python package name",
+            "name": "package-name",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "3.13",
+            "description": "Python version for the quality lane",
+            "name": "python-version",
+            "required": "false",
+            "type": "string"
+          }
+        ],
+        "name": "reusable quality",
+        "path": ".github/workflows/reusable_quality.yml",
+        "workflow": "reusable_quality"
+      },
+      {
+        "inputs": [
+          {
+            "default": "false",
+            "description": "",
+            "name": "airflow-enabled",
+            "required": "false",
+            "type": "boolean"
+          },
+          {
+            "default": "skipped",
+            "description": "",
+            "name": "airflow-result",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "skipped",
+            "description": "",
+            "name": "airflow-suite-result",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "main",
+            "description": "",
+            "name": "base-branch",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "true",
+            "description": "",
+            "name": "create-review-pr",
+            "required": "false",
+            "type": "boolean"
+          },
+          {
+            "default": "false",
+            "description": "",
+            "name": "deep-validation-enabled",
+            "required": "false",
+            "type": "boolean"
+          },
+          {
+            "default": "skipped",
+            "description": "",
+            "name": "deep-validation-result",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "false",
+            "description": "",
+            "name": "external-real-validation-enabled",
+            "required": "false",
+            "type": "boolean"
+          },
+          {
+            "default": "skipped",
+            "description": "",
+            "name": "external-real-validation-result",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "false",
+            "description": "",
+            "name": "fab-provider-enabled",
+            "required": "false",
+            "type": "boolean"
+          },
+          {
+            "default": "skipped",
+            "description": "",
+            "name": "fab-provider-result",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "skipped",
+            "description": "",
+            "name": "fab-provider-suite-result",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "false",
+            "description": "",
+            "name": "idp-enabled",
+            "required": "false",
+            "type": "boolean"
+          },
+          {
+            "default": "skipped",
+            "description": "",
+            "name": "idp-result",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "false",
+            "description": "",
+            "name": "license-compliance-enabled",
+            "required": "false",
+            "type": "boolean"
+          },
+          {
+            "default": "skipped",
+            "description": "",
+            "name": "license-compliance-result",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "false",
+            "description": "",
+            "name": "nightly-compatibility-enabled",
+            "required": "false",
+            "type": "boolean"
+          },
+          {
+            "default": "skipped",
+            "description": "",
+            "name": "nightly-compatibility-result",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "Promotion: core-only plugin ready for main",
+            "description": "",
+            "name": "pr-title",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "unknown",
+            "description": "",
+            "name": "quality-result",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "ready/core",
+            "description": "",
+            "name": "review-branch-prefix",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "",
+            "description": "",
+            "name": "run-url",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "feature-branch",
+            "description": "",
+            "name": "source-branch",
+            "required": "false",
+            "type": "string"
+          },
+          {
+            "default": "",
+            "description": "",
+            "name": "source-sha",
+            "required": "false",
+            "type": "string"
+          }
+        ],
+        "name": "reusable review PR gate",
+        "path": ".github/workflows/reusable_review_pr_gate.yml",
+        "workflow": "reusable_review_pr_gate"
+      }
+    ],
+    "workflow_dispatch_entrypoints": [
+      {
+        "inputs": [
+          {
+            "default": "true",
+            "description": "Create a new core-only promotion branch and PR to main only after all enabled gates succeed",
+            "name": "create_review_pr",
+            "required": "true",
+            "type": "boolean"
+          },
+          {
+            "default": "false",
+            "description": "Fail instead of skip when external LDAP/Entra variables are missing",
+            "name": "require_external_secrets",
+            "required": "true",
+            "type": "boolean"
+          },
+          {
+            "default": "true",
+            "description": "Run Airflow installation and integration smoke tests",
+            "name": "run_airflow",
+            "required": "true",
+            "type": "boolean"
+          },
+          {
+            "default": "true",
+            "description": "Run deep validation unit, mock, coverage, and dead-code jobs",
+            "name": "run_deep_validation",
+            "required": "true",
+            "type": "boolean"
+          },
+          {
+            "default": "false",
+            "description": "Run optional DB-backed and real external identity validation lane",
+            "name": "run_external_real_validation",
+            "required": "true",
+            "type": "boolean"
+          },
+          {
+            "default": "true",
+            "description": "Run official FAB provider 3.5.0 mirror validation",
+            "name": "run_fab_provider_validation",
+            "required": "true",
+            "type": "boolean"
+          },
+          {
+            "default": "true",
+            "description": "Run LDAP and Entra integration-style tests",
+            "name": "run_idp_integration",
+            "required": "true",
+            "type": "boolean"
+          },
+          {
+            "default": "true",
+            "description": "Run OSS license, SBOM, and static security compliance lane",
+            "name": "run_license_compliance",
+            "required": "true",
+            "type": "boolean"
+          },
+          {
+            "default": "false",
+            "description": "Run scheduled-style compatibility matrix in manual CI",
+            "name": "run_nightly_compatibility",
+            "required": "true",
+            "type": "boolean"
+          }
+        ],
+        "name": "manual CI gate",
+        "path": ".github/workflows/ci.yml",
+        "workflow": "ci"
+      },
+      {
+        "inputs": [],
+        "name": "nightly compatibility",
+        "path": ".github/workflows/nightly_compatibility.yml",
+        "workflow": "nightly_compatibility"
+      }
+    ]
+  }
+}

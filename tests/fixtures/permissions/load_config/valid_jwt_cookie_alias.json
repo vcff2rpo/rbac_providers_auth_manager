@@ -1,0 +1,8 @@
+{
+  "kind": "load_config",
+  "expect": "success",
+  "assertions": {
+    "jwt_cookie.cookie_samesite": "lax",
+    "jwt_cookie.cookie_path": "/"
+  }
+}

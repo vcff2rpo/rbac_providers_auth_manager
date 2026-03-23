@@ -1,0 +1,98 @@
+{
+  "workflows": {
+    "ci_self_check": {
+      "pull_request": [
+        ".github/workflows/**",
+        "ci/**",
+        "tests/ci/**",
+        "pyproject.toml",
+        "pytest.ini",
+        "mypy.ini",
+        "docs/CI_OVERVIEW.md"
+      ],
+      "push": [
+        ".github/workflows/**",
+        "ci/**",
+        "tests/ci/**",
+        "pyproject.toml",
+        "pytest.ini",
+        "mypy.ini",
+        "docs/CI_OVERVIEW.md"
+      ]
+    },
+    "compliance_fast": {
+      "pull_request": [
+        ".github/workflows/reusable_license_compliance.yml",
+        ".github/workflows/compliance_fast.yml",
+        "LICENSE",
+        "NOTICE",
+        "REUSE.toml",
+        "LICENSES/**",
+        ".gitleaks.toml",
+        "pyproject.toml",
+        "setup.py",
+        "ci/**"
+      ],
+      "push": [
+        ".github/workflows/reusable_license_compliance.yml",
+        ".github/workflows/compliance_fast.yml",
+        "LICENSE",
+        "NOTICE",
+        "REUSE.toml",
+        "LICENSES/**",
+        ".gitleaks.toml",
+        "pyproject.toml",
+        "setup.py",
+        "ci/**"
+      ]
+    },
+    "quality_fast": {
+      "pull_request": [
+        "__init__.py",
+        "api/**",
+        "auth_manager.py",
+        "authorization/**",
+        "compatibility/**",
+        "config.py",
+        "config_runtime/**",
+        "core/**",
+        "entrypoints/**",
+        "identity/**",
+        "providers/**",
+        "runtime/**",
+        "services/**",
+        "ui/**",
+        "tests/**",
+        ".github/workflows/reusable_quality.yml",
+        ".github/workflows/quality_fast.yml",
+        "ci/**",
+        "pyproject.toml",
+        "pytest.ini",
+        "mypy.ini"
+      ],
+      "push": [
+        "__init__.py",
+        "api/**",
+        "auth_manager.py",
+        "authorization/**",
+        "compatibility/**",
+        "config.py",
+        "config_runtime/**",
+        "core/**",
+        "entrypoints/**",
+        "identity/**",
+        "providers/**",
+        "runtime/**",
+        "services/**",
+        "ui/**",
+        "tests/**",
+        ".github/workflows/reusable_quality.yml",
+        ".github/workflows/quality_fast.yml",
+        "ci/**",
+        "pyproject.toml",
+        "pytest.ini",
+        "mypy.ini"
+      ]
+    }
+  }
+}

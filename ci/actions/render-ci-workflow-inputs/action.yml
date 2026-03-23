@@ -1,0 +1,27 @@
+name: render CI workflow inputs
+description: Render committed workflow input/default reference artifacts and optionally append markdown to the job summary.
+inputs:
+  repo-root:
+    description: Repository root.
+    required: false
+    default: '.'
+  output-md:
+    description: Output markdown file.
+    required: true
+  output-json:
+    description: Output json file.
+    required: true
+  append-to-summary:
+    description: Whether to append rendered markdown to GITHUB_STEP_SUMMARY.
+    required: false
+    default: 'false'
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        set -euo pipefail
+        python ci/scripts/render_ci_workflow_inputs.py           --repo-root "${{ inputs.repo-root }}"           --output-md "${{ inputs.output-md }}"           --output-json "${{ inputs.output-json }}"
+        if [ "${{ inputs.append-to-summary }}" = "true" ]; then
+          cat "${{ inputs.output-md }}" >> "$GITHUB_STEP_SUMMARY"
+        fi

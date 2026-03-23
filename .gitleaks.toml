@@ -1,0 +1,14 @@
+title = "gitleaks config"
+
+[allowlist]
+description = "Known non-secret test placeholders"
+paths = [
+  '''tests/fixtures/''',
+  '''\.ci-artifacts/''',
+]
+regexes = [
+  '''ci-only-jwt-secret-not-for-production-change-me''',
+  '''dummy-entra-secret''',
+  '''adminpassword''',
+  '''bitnami1''',
+]

@@ -1,0 +1,20 @@
+name: render project CI overview
+description: Render the maintainer-facing CI overview outside the ci subtree
+inputs:
+  repo-root:
+    description: Repository root
+    required: false
+    default: .
+  output-md:
+    description: Output markdown path
+    required: true
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        set -euo pipefail
+        cd "${{ inputs.repo-root }}"
+        python ci/scripts/render_project_ci_overview.py \
+          --repo-root . \
+          --output-md "${{ inputs.output-md }}"

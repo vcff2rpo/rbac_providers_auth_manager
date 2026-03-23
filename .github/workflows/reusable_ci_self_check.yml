@@ -1,0 +1,88 @@
+name: reusable CI self check
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        required: false
+        type: string
+        default: '3.13'
+permissions:
+  contents: read
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+jobs:
+  ci_self_check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+    - uses: ./ci/actions/bootstrap-python
+      with:
+        python-version: ${{ inputs.python-version }}
+        cache-dependency-path: 'ci/config/versions.json
+
+          ci/config/path_filters.json
+
+          ci/CI_REFERENCE.md
+
+          ci/CI_REFERENCE.json
+
+          ci/CI_OWNERSHIP.json
+
+          ci/CI_WORKFLOW_INPUTS.md
+
+          ci/CI_WORKFLOW_INPUTS.json
+
+          ci/requirements/requirements-dev.txt
+
+          ci/scripts/*.py
+
+          tests/ci/*.py
+
+          .github/workflows/*.yml
+
+          ci/actions/*/action.yml
+
+          '
+    - uses: ./ci/actions/install-python-deps
+      with:
+        requirements-files: 'ci/requirements/requirements-dev.txt
+
+          '
+    - uses: ./ci/actions/render-ci-reference
+      with:
+        repo-root: .
+        output-dir: .ci-artifacts/ci-self-check
+        append-to-summary: 'true'
+    - uses: ./ci/actions/render-ci-ownership
+      with:
+        repo-root: .
+        output-json: .ci-artifacts/ci-self-check/ci-ownership.json
+    - uses: ./ci/actions/render-ci-workflow-inputs
+      with:
+        repo-root: .
+        output-md: .ci-artifacts/ci-self-check/ci-workflow-inputs.md
+        output-json: .ci-artifacts/ci-self-check/ci-workflow-inputs.json
+    - uses: ./ci/actions/render-project-ci-overview
+      with:
+        repo-root: .
+        output-md: .ci-artifacts/ci-self-check/ci-overview.md
+        append-to-summary: 'true'
+    - uses: ./ci/actions/validate-ci-governance
+      with:
+        repo-root: .
+        rendered-reference-md: .ci-artifacts/ci-self-check/ci-reference.md
+        rendered-reference-json: .ci-artifacts/ci-self-check/ci-reference.json
+        rendered-ownership-json: .ci-artifacts/ci-self-check/ci-ownership.json
+        rendered-workflow-inputs-md: .ci-artifacts/ci-self-check/ci-workflow-inputs.md
+        rendered-workflow-inputs-json: .ci-artifacts/ci-self-check/ci-workflow-inputs.json
+        rendered-project-overview-md: .ci-artifacts/ci-self-check/ci-overview.md
+    - uses: ./ci/actions/upload-artifact-bundle
+      with:
+        name: ci-self-check
+        path: '.ci-artifacts/ci-self-check/
+
+          '

@@ -1,0 +1,61 @@
+name: render final CI summary
+description: Render the final workflow summary, CI inventory, and JSON artifacts.
+inputs:
+  output-dir:
+    description: Directory where rendered files should be written.
+    required: true
+  run-url:
+    description: Workflow run URL.
+    required: true
+  source-sha:
+    description: Source commit SHA.
+    required: true
+  ci_self_check-enabled:
+    required: true
+  ci_self_check-result:
+    required: true
+  quality-enabled:
+    required: true
+  quality-result:
+    required: true
+  deep_validation-enabled:
+    required: true
+  deep_validation-result:
+    required: true
+  airflow_integration-enabled:
+    required: true
+  airflow_integration-result:
+    required: true
+  identity_provider_integration-enabled:
+    required: true
+  identity_provider_integration-result:
+    required: true
+  fab_provider_validation-enabled:
+    required: true
+  fab_provider_validation-result:
+    required: true
+  nightly_compatibility-enabled:
+    required: true
+  nightly_compatibility-result:
+    required: true
+  external_real_validation-enabled:
+    required: true
+  external_real_validation-result:
+    required: true
+  license_compliance-enabled:
+    required: true
+  license_compliance-result:
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Render final workflow summary artifacts
+      shell: bash
+      run: |
+        set -euo pipefail
+        out_dir="${{ inputs.output-dir }}"
+        mkdir -p "$out_dir"
+        python ci/scripts/render_final_ci_summary.py           --output-md "$out_dir/ci-summary.md"           --output-json "$out_dir/ci-summary.json"           --run-url "${{ inputs.run-url }}"           --source-sha "${{ inputs.source-sha }}"           --ci_self_check-enabled "${{ inputs.ci_self_check-enabled }}"           --ci_self_check-result "${{ inputs.ci_self_check-result }}"           --quality-enabled "${{ inputs.quality-enabled }}"           --quality-result "${{ inputs.quality-result }}"           --deep_validation-enabled "${{ inputs.deep_validation-enabled }}"           --deep_validation-result "${{ inputs.deep_validation-result }}"           --airflow_integration-enabled "${{ inputs.airflow_integration-enabled }}"           --airflow_integration-result "${{ inputs.airflow_integration-result }}"           --identity_provider_integration-enabled "${{ inputs.identity_provider_integration-enabled }}"           --identity_provider_integration-result "${{ inputs.identity_provider_integration-result }}"           --fab_provider_validation-enabled "${{ inputs.fab_provider_validation-enabled }}"           --fab_provider_validation-result "${{ inputs.fab_provider_validation-result }}"           --nightly_compatibility-enabled "${{ inputs.nightly_compatibility-enabled }}"           --nightly_compatibility-result "${{ inputs.nightly_compatibility-result }}"           --external_real_validation-enabled "${{ inputs.external_real_validation-enabled }}"           --external_real_validation-result "${{ inputs.external_real_validation-result }}"           --license_compliance-enabled "${{ inputs.license_compliance-enabled }}"           --license_compliance-result "${{ inputs.license_compliance-result }}"
+        python ci/scripts/render_ci_inventory.py           --repo-root .           --output-md "$out_dir/ci-inventory.md"           --output-json "$out_dir/ci-inventory.json"
+        cat "$out_dir/ci-summary.md" >> "$GITHUB_STEP_SUMMARY"
+        cat "$out_dir/ci-inventory.md" >> "$GITHUB_STEP_SUMMARY"

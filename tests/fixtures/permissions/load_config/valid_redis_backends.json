@@ -1,0 +1,10 @@
+{
+  "kind": "load_config",
+  "expect": "success",
+  "assertions": {
+    "security.rate_limit_backend": "redis",
+    "security.redis_url": "redis://cache.example.com:6379/0",
+    "security.auth_state_backend": "redis",
+    "security.auth_state_redis_url": "redis://cache.example.com:6379/1"
+  }
+}

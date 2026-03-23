@@ -1,0 +1,27 @@
+name: upload CI artifact bundle
+description: Wrapper around actions/upload-artifact for consistent CI artifact handling.
+inputs:
+  name:
+    description: Artifact name.
+    required: true
+  path:
+    description: Newline-delimited artifact paths.
+    required: true
+  if-no-files-found:
+    description: Behavior when no files are found.
+    required: false
+    default: warn
+  retention-days:
+    description: Artifact retention in days.
+    required: false
+    default: '0'
+runs:
+  using: composite
+  steps:
+    - name: Upload artifact bundle
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.name }}
+        path: ${{ inputs.path }}
+        if-no-files-found: ${{ inputs.if-no-files-found }}
+        retention-days: ${{ inputs.retention-days }}
