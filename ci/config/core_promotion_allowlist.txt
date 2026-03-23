@@ -6,7 +6,6 @@
 LICENSE
 NOTICE
 README.md
-REUSE.toml
 __init__.py
 api/
 auth_manager.py
